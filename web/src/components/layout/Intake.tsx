@@ -18,6 +18,7 @@ const LOADING_STAGES = [
   { title: "Estimating timeline and costs", detail: "Preparing your first complete plan" },
 ];
 
+const MIN_STAGE_MS = 800;
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default function Intake({ onDone }: { onDone: (p: BusinessProfile) => void }) {
@@ -33,14 +34,15 @@ export default function Intake({ onDone }: { onDone: (p: BusinessProfile) => voi
     if (!type) { setError("Pick what you're opening."); return; }
     if (!address.trim()) { setError("Add the street address of the space you're looking at."); return; }
     setLoadingStage(0);
-    const progress = window.setInterval(() => setLoadingStage(stage => stage === null ? null : Math.min(stage + 1, 1)), 650);
-    const r = await resolveAddress(completeProfile({ businessType: type, address: { raw: address.trim() } })).catch(() => ({ error: "Couldn't reach the address lookup. Check your connection and try again." }));
-    window.clearInterval(progress);
+    const lookup = resolveAddress(completeProfile({ businessType: type, address: { raw: address.trim() } })).catch(() => ({ error: "Couldn't reach the address lookup. Check your connection and try again." }));
+    await pause(MIN_STAGE_MS);
+    setLoadingStage(1);
+    const [r] = await Promise.all([lookup, pause(MIN_STAGE_MS)]);
     if ("error" in r) { setError(r.error); setLoadingStage(null); return; }
     setLoadingStage(2);
-    await pause(180);
+    await pause(MIN_STAGE_MS);
     setLoadingStage(3);
-    await pause(220);
+    await pause(MIN_STAGE_MS);
     onDone(r);
   }
 
