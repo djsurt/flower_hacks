@@ -132,7 +132,10 @@ They verify checksums, match conservative street addresses (retaining units),
 and return bounded summaries, record IDs, provenance and limitations. The
 coordinator verifies the replying node IDs. No model invents counts or decides
 whether a worker responded. Node failures remain explicit partial results.
-The existing conversational planner remains available separately.
+Web chat uses the local HTTP bridge and SuperLink described in
+[the AgentApp setup](../flower-agent/README.md#run-locally); start those services
+as well to use chat alongside evidence checks. The original conversational
+planner also remains available in Flower Chat.
 
 Current web capabilities:
 - San José: matched permit IDs and recorded work types.

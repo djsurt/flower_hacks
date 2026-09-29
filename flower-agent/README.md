@@ -11,7 +11,9 @@ request from `bridge.py` and delegates read-only tasks through Flower Grid to
 the three Docker SuperNodes. `agent/evidence.py` computes address matches and
 provenance locally on each node without a model call. Reports stream to the
 Next.js plan for human review. See [setup and current capabilities](../flower-nodes/README.md#integrated-web-app).
-The conversational workflow below is a separate mode; its original role calls
+Chat and evidence checks share this AgentApp but use separate transports: chat
+uses the local HTTP bridge (`bridge/app.py`), while evidence uses the CLI bridge
+(`bridge.py`) and SuperGrid. The conversational planner's original role calls
 are sequential and its source-domain check does not verify factual claims.
 
 A human-supervised team of agents that plans every permit a café, restaurant or boutique needs to open in San José / Santa Clara County. Every step carries a source, the Checker flags anything without an official `.gov` source, and nothing moves forward until the owner types **APPROVE**.
@@ -131,7 +133,12 @@ To stop the demo, press `Ctrl+C` once in each of the three terminals.
 
 ## Publish and run on SuperGrid
 
-The app publishes as `@niujiazhen/comply-cofounder` and defaults to `@niujiazhen/personal`:
+The app publishes as `@djsurti3003/comply-cofounder`. The local chat bridge selects
+the logged-in account's personal federation unless `FLOWER_BRIDGE_FEDERATION`
+is set. Evidence checks use the federation and node IDs in
+`flower-nodes/deployment.json`. To use the published app in the chat bridge, set
+`FLOWER_USE_PUBLISHED_APP=1` and
+`FLOWER_AGENT_APP_SPEC=@djsurti3003/comply-cofounder`:
 ```bash
 unset COMPLY_MODEL
 uv run flwr login supergrid
