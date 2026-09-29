@@ -83,6 +83,41 @@ export async function placesAround(lat: number, lng: number, radius = 1000): Pro
   return places;
 }
 
+const COMPETITOR_FILTER: Record<BusinessType, string> = {
+  cafe: `["amenity"="cafe"]`,
+  restaurant: `["amenity"~"^(restaurant|fast_food|ice_cream)$"]`,
+  retail_boutique: `["shop"~"^(clothes|boutique|gift|shoes|jewelry|fashion_accessories|bag|cosmetics|second_hand|variety_store)$"]`,
+};
+const competitorCache = new Map<string, { at: number; places: Place[] }>();
+const competitorInflight = new Map<string, Promise<Place[]>>();
+
+/** Only the competing kind of business over a wide radius: one cached request covers every lease being compared. */
+export function competitorsAround(lat: number, lng: number, radius: number, type: BusinessType): Promise<Place[]> {
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)},${Math.round(radius)},${type}`;
+  const hit = competitorCache.get(key);
+  if (hit && Date.now() - hit.at < 6 * 3600e3) return Promise.resolve(hit.places);
+  if (!competitorInflight.has(key)) {
+    const load = (async () => {
+      const q = `[out:json][timeout:25];nwr(around:${Math.round(radius)},${lat},${lng})${COMPETITOR_FILTER[type]};out center tags 3000;`;
+      const seen = new Set<string>();
+      const places: Place[] = [];
+      for (const e of await overpass(q)) {
+        const t = e.tags ?? {};
+        const c = classify(t);
+        const la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon;
+        if (!c || la == null || lo == null || seen.has(`${e.type}${e.id}`)) continue;
+        seen.add(`${e.type}${e.id}`);
+        places.push({ id: `${e.type}${e.id}`, cat: c.cat, kind: c.kind, name: t.name ?? c.kind, lat: la, lng: lo, meters: Math.round(haversine(lat, lng, la, lo)) });
+      }
+      const result = competitorPlaces(places, type);
+      competitorCache.set(key, { at: Date.now(), places: result });
+      return result;
+    })().finally(() => setTimeout(() => competitorInflight.delete(key), 1000));
+    competitorInflight.set(key, load);
+  }
+  return competitorInflight.get(key)!;
+}
+
 /** Direct competitors: the same kind of business, from the same OpenStreetMap places. */
 export function competitorPlaces(places: Place[], type: BusinessType): Place[] {
   if (type === "cafe") return places.filter(p => p.kind === "Café");

@@ -8,6 +8,7 @@ import RoadmapView, { PHASE_INFO } from "@/components/plan/RoadmapView";
 import CostChart from "@/components/plan/CostChart";
 import Competitors from "@/components/location/Competitors";
 import NeighborhoodView from "@/components/location/NeighborhoodView";
+import LeaseRecommendations from "@/components/location/LeaseRecommendations";
 import Incentives from "@/components/plan/Incentives";
 
 type Props = { plan: Plan; previous?: Plan; diff?: PlanDiff };
@@ -70,7 +71,7 @@ export default function PlanView({ plan, previous, diff }: Props) {
       </>}
       {tab === "roadmap" && <RoadmapView plan={plan} previous={previous} diff={diff} focusPhase={phase} onClearFocus={() => setPhase("all")} />}
       {tab === "costs" && <CostChart plan={plan} previous={previous} />}
-      {tab === "location" && <><NeighborhoodView plan={plan} /><Competitors plan={plan} /></>}
+      {tab === "location" && <><NeighborhoodView plan={plan} /><Competitors plan={plan} /><LeaseRecommendations plan={plan} /></>}
       {tab === "grants" && <Incentives plan={plan} diff={diff} />}
     </main>
   );
