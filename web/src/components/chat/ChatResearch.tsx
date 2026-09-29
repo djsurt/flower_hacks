@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Plan } from "@/lib/schemas";
+import type { ResearchAgentId } from "@/lib/researchRouting";
 
 type Stage = 0 | 1 | 2 | 3 | 4;
 type Node = {
@@ -31,8 +32,8 @@ function makeNodes(plan: Plan): Node[] {
   ];
 }
 
-export default function ChatResearch({ plan, runId }: { plan: Plan; runId: string }) {
-  const nodes = useMemo(() => makeNodes(plan), [plan]);
+export default function ChatResearch({ plan, runId, agentIds }: { plan: Plan; runId: string; agentIds: ResearchAgentId[] }) {
+  const nodes = useMemo(() => makeNodes(plan).filter(node => agentIds.includes(node.id as ResearchAgentId)), [plan, agentIds]);
   const [stages, setStages] = useState<Record<string, Stage>>(() => Object.fromEntries(nodes.map(n => [n.id, 0])));
   const [phase, setPhase] = useState<"dispatch" | "verify" | "approved">("dispatch");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -52,20 +53,21 @@ export default function ChatResearch({ plan, runId }: { plan: Plan; runId: strin
   const active = nodes.find(n => stages[n.id] > 0 && stages[n.id] < 4);
   return <div className="grid gap-2.5 rounded-xl border border-line bg-bg p-3 text-[12px]">
     <div className="flex items-start justify-between gap-2">
-      <div><div className="eyebrow">Flower orchestration trace</div><div className="mt-0.5 font-semibold">Hub + 4 specialist SuperNodes</div></div>
-      <span className={`pill !px-2 !py-0.5 ${phase === "dispatch" ? "bg-accent-soft text-accent" : "bg-good-soft text-good"}`}>{phase === "dispatch" ? `${replied}/4 running` : "4/4 verified"}</span>
+      <div><div className="eyebrow">Flower orchestration trace</div><div className="mt-0.5 font-semibold">Hub selected {nodes.length} relevant SuperNode{nodes.length === 1 ? "" : "s"}</div></div>
+      <span className={`pill !px-2 !py-0.5 ${phase === "dispatch" ? "bg-accent-soft text-accent" : "bg-good-soft text-good"}`}>{phase === "dispatch" ? `${replied}/${nodes.length} running` : `${nodes.length}/${nodes.length} verified`}</span>
     </div>
 
     <div className="relative overflow-hidden rounded-lg border border-line bg-surface p-2.5 font-mono text-[10.5px]">
       <div className="absolute bottom-0 left-5 top-0 w-px bg-line" />
       <TraceLine dot="H" strong>Hub · decompose regulatory fingerprint</TraceLine>
       <TraceLine dot="↳">comply.task.v1 · address replaced by SHA-256 token</TraceLine>
-      <TraceLine dot="↳">Grid.push_messages × 4 · parallel dispatch</TraceLine>
+      <TraceLine dot="↳">route by changed facts · {agentIds.join(" + ")}</TraceLine>
+      <TraceLine dot="↳">Grid.push_messages × {nodes.length}{nodes.length > 1 ? " · parallel dispatch" : ""}</TraceLine>
       {active && <TraceLine dot="●" pulse>{active.name} · {TOOLS[stages[active.id]]}</TraceLine>}
       {phase !== "dispatch" && <TraceLine dot="V" strong>Verifier · official sources + conflict gate</TraceLine>}
     </div>
 
-    <div className="grid grid-cols-2 gap-2">
+    <div className={`grid gap-2 ${nodes.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
       {nodes.map(node => { const stage = stages[node.id]; return <article key={node.id} className={`rounded-lg border p-2 transition-colors ${stage > 0 && stage < 4 ? "border-accent bg-accent-soft/40" : "border-line bg-surface"}`}>
         <div className="flex items-center justify-between gap-1"><strong className="truncate">{node.name}</strong><NodeState stage={stage} /></div>
         <p className="mt-0.5 truncate text-[10px] text-ink-3">{node.scope}</p>

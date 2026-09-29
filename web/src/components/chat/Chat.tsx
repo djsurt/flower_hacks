@@ -6,12 +6,13 @@ import { humanSummary } from "@/lib/engine/diff";
 import { daysBetween, fmtShort, kmoney, spanText } from "@/lib/dates";
 import StepIcon from "@/components/plan/StepIcon";
 import ChatResearch from "@/components/chat/ChatResearch";
+import { researchAgentsForChange, type ResearchAgentId } from "@/lib/researchRouting";
 
 export type ChatMsg =
   | { role: "user" | "assistant" | "note"; text: string }
   | { role: "diff"; diff: PlanDiff; version: number; label: string }
   | { role: "trace"; steps: TraceStep[] }
-  | { role: "research"; id: string };
+  | { role: "research"; id: string; agentIds: ResearchAgentId[] };
 export type TraceStep = { id: string; label: string; detail?: string; state: "active" | "done" | "error" };
 
 type Props = {
@@ -40,12 +41,6 @@ export default function Chat({ messages, setMessages, profile, plan, onUpdate, o
     return () => observer.disconnect();
   }, []);
 
-  function research() {
-    if (busy) return;
-    const id = `research-${Date.now()}`;
-    setMessages(ms => [...ms, { role: "research", id }]);
-  }
-
   // Streamed text goes into the last assistant bubble; an update closes it so later text starts a new one.
   // Decide "new bubble or append" when the event arrives, not inside the state updater, which React may run later.
   const appendText = (delta: string, fresh: { v: boolean; closedTrace: boolean }) => {
@@ -66,6 +61,8 @@ export default function Chat({ messages, setMessages, profile, plan, onUpdate, o
     setMessages(ms => [...ms, { role: "user", text }]);
     setBusy(true);
     const fresh = { v: true, closedTrace: false };
+    const pendingResearch = new Set<ResearchAgentId>();
+    let workingProfile = profile;
     try {
       const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text, history, profile, seriesId: seriesId.current }) });
       if (!res.body) throw new Error("no body");
@@ -100,6 +97,8 @@ export default function Chat({ messages, setMessages, profile, plan, onUpdate, o
           }
           else if (e.type === "error") setMessages(ms => [...ms, { role: "note", text: e.message }]);
           else if (e.type === "update") {
+            researchAgentsForChange(workingProfile, e.profile).forEach(id => pendingResearch.add(id));
+            workingProfile = e.profile;
             const { diff, version } = onUpdate(e.profile, e.label);
             setMessages(ms => [...ms, { role: "diff", diff, version, label: e.label }]);
             fresh.v = true;
@@ -107,6 +106,7 @@ export default function Chat({ messages, setMessages, profile, plan, onUpdate, o
           }
         }
       }
+      if (pendingResearch.size) setMessages(ms => [...ms, { role: "research", id: `research-${Date.now()}`, agentIds: [...pendingResearch] }]);
     } catch {
       setMessages(ms => [...ms, { role: "note", text: "Couldn't reach the server. Check your connection and try again." }]);
     } finally {
@@ -118,12 +118,12 @@ export default function Chat({ messages, setMessages, profile, plan, onUpdate, o
   return (
     <aside id="chat" className="panel flex min-h-[560px] scroll-mt-4 flex-col lg:sticky lg:top-3 lg:h-[calc(100vh-24px)]" aria-label="Plan chat">
       <div className="border-b border-line px-4 py-3.5">
-        <div className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Plan copilot</h2><button className="btn !px-2.5 !py-1 text-xs" onClick={research} disabled={busy}>Run 4 agents</button></div>
-        <p className="text-xs text-ink-3">Chat normally. Anything you mention, like food, alcohol, the space, rent, budget or dates, updates the plan as we talk.</p>
+        <div className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Plan copilot</h2><span className="pill bg-accent-soft text-accent">Auto-routed agents</span></div>
+        <p className="text-xs text-ink-3">Answer one question at a time. When a fact changes compliance, the relevant Flower specialists start automatically.</p>
         {mode === "flower" && <p className="mt-2 text-xs text-ink-3">Powered by a human-supervised Flower AgentApp.</p>}
       </div>
       <div ref={list} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3.5 max-lg:max-h-[480px]" aria-live="polite">
-        {messages.map((m, i) => m.role === "research" ? <ChatResearch key={m.id} plan={plan} runId={m.id} />
+        {messages.map((m, i) => m.role === "research" ? <ChatResearch key={m.id} plan={plan} runId={m.id} agentIds={m.agentIds} />
           : m.role === "trace" ? <Trace key={i} steps={m.steps} />
           : m.role === "diff"
           ? <DiffCard key={i} m={m} onUndo={onUndo} canUndo={m.version === currentVersion && currentVersion > 0} />

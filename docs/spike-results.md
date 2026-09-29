@@ -14,6 +14,6 @@ Validated on 2026-09-29 against Flower 1.39.0 and SuperGrid.
 
 ## Demo scope
 
-The `Research ✦` tab is a transparent demo replay built from official-source links. It demonstrates the intended event stream, four specialist boundaries, partial-result-friendly cards, confidence, verifier candidates and human approval. It does not claim that the displayed Connector searches are live. The banner in the product states exactly which Flower capabilities were verified live.
+The research trace inside Plan Copilot is a transparent demo replay built from official-source links. Regulatory changes automatically route to only the relevant specialists, and the chat demonstrates the event stream, specialist boundaries, confidence, verifier candidates and human approval. It does not claim that displayed Connector searches are live. The banner in the product states exactly which Flower capabilities were verified live.
 
 No API keys, raw street addresses, model responses or Flower credentials are stored in this document or emitted by the probe.
