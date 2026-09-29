@@ -19,7 +19,14 @@ export async function resolveAddress(profile: BusinessProfile): Promise<Business
   const res = await fetch("/api/geocode", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: profile.address.raw }) });
   const g = await res.json();
   if (!g.ok) return { error: g.error };
-  return { ...profile, address: { raw: profile.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng }, jurisdiction: g.jurisdiction };
+  return {
+    ...profile,
+    address: {
+      raw: profile.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng,
+      resolutionSource: g.resolutionSource, matchQuality: g.matchQuality, warning: g.warning,
+    },
+    jurisdiction: g.jurisdiction,
+  };
 }
 
 export default function App() {
