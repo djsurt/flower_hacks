@@ -25,7 +25,7 @@ Start SuperLink and the bridge from `flower-agent/` before sending a chat messag
 - `src/rules/*.json`: permits, costs, incentives. **All plan facts live here.** Each permit has a plain-language name, phase, "what to do" steps, contact, official source link and `verified`/`lastVerified`.
 - `src/lib/engine/buildPlan.ts`: pure `buildPlan(profile)`. Selects rules by jurisdiction + json-logic, schedules by dependencies (fast/typical/slow), finds the critical path, estimates costs (rent while waiting comes from the timeline), matches incentives.
 - `src/lib/engine/diff.ts`: `diffPlans` + `humanSummary` for the "What changed" card. Numbers always come from here.
-- `src/lib/services/geocode.ts`: US Census geocoder → city / unincorporated / out-of-area.
+- `src/lib/services/geocode.ts`: US Census geocoder with OpenStreetMap fallback → California city/county or out-of-state.
 - `src/lib/services/places.ts`, `neighborhood.ts`: OpenStreetMap places and Census Reporter demographics.
 - `src/lib/llm/chatAgent.ts`: the `update_profile` schema, deterministic executor and plan snapshot sent to Flower.
 - `src/app/api/chat/route.ts`: proxies the Flower event stream, validates emitted patches, and rebuilds the plan.
@@ -40,6 +40,8 @@ The owner gives two things: business type and address. Everything else starts as
 ## Data status (checked 2026-09-28)
 
 Checked against official pages: San José business tax rates and 90-day registration rule, County DEH plan review process and inspections, change-of-ownership rule, Streamlined Restaurant Program criteria and timeline, ABC 2026 application fees and process, CDTFA seller's permit, EDD registration, County FBN fee, the 60-day food safety certificate rule, and the Vacant/Existing Storefront grants. Rules not yet checked, and fees that are estimates (DEH plan check and permit fees, building permit fees), are marked **Needs verification** or carry a `feeNote` in the UI.
+
+All California addresses receive the applicable statewide/federal rules and a local city/county placeholder linked to CalGOLD. Detailed local permit data is currently loaded for San José, Sunnyvale and unincorporated Santa Clara County. Other local rows are explicitly labeled as estimates until their city and county rules are researched and verified.
 
 Some official sites (sanjoseca.gov, santaclaracounty.gov) block automated downloads; they were read via the Internet Archive or search. Re-check the DEH fee schedule by hand: https://deh.santaclaracounty.gov/environmental-health-fee-adjustment-2026
 

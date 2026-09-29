@@ -53,13 +53,16 @@ export default function FlowerEvidence({ profile, saved, onReview }: {
 
   const successes = report?.nodes.filter(n => n.status === "ok").length ?? 0;
   const isSaved = saved?.report.runId === report?.runId && !!report;
+  const localEvidenceCovered = profile.jurisdiction?.county === "santa_clara";
   return <section className="mb-5 rounded-xl border border-line bg-surface p-5" aria-labelledby="flower-heading">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 id="flower-heading" className="font-display text-lg font-bold">Public data evidence</h2>
         <p className="text-sm text-ink-2">Three specialists connected through Flower</p></div>
       <button className="btn btn-primary" onClick={check} disabled={busy}>{busy ? "Checking…" : report ? "Refresh evidence" : "Check my address"}</button>
     </div>
-    <p className="mt-3 text-sm text-ink-2">Check your address against San José permits, county food-facility plan checks, and California alcohol records. Your business profile is sent through Flower to your nodes; they return summaries from local public-data snapshots.</p>
+    <p className="mt-3 text-sm text-ink-2">{localEvidenceCovered
+      ? "Check your address against San José permits, Santa Clara County food-facility plan checks, and California alcohol records."
+      : "The current permit, food-facility and alcohol snapshots cover San José or Santa Clara County, so all three nodes will report their regional limitations for this address."} Your business profile is sent through Flower to your nodes; they return summaries from local public-data snapshots.</p>
     {busy && <div className="mt-3 flex items-center gap-3 text-sm"><p role="status">{status} This can take a few minutes.</p><button className="btn" onClick={() => abort.current?.abort()}>Cancel</button></div>}
     {error && <p role="alert" className="mt-3 text-sm text-crit">{error}</p>}
     {report && <>

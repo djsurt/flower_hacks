@@ -4,10 +4,10 @@
 
 ▶ **[Watch the 2-minute demo (demo.mp4)](demo.mp4)**
 
-A planner for people opening a physical business (café, restaurant or retail boutique) in Santa Clara County, California. The owner enters a business type and an address; everything else comes from a conversation. The app returns:
+A planner for people opening a physical business (café, restaurant or retail boutique) in California. The owner enters a business type and an address; everything else comes from a conversation. The app returns:
 
-- **Who regulates the address**: city, unincorporated county, or out of area (US Census geocoder)
-- **A roadmap** of every city, county, state and federal step, grouped into waves you can work on in parallel, with a calendar view, documents checklist, official links, office hours, and who can help
+- **Who regulates the address**: city, unincorporated county, or out of state (US Census geocoder with OpenStreetMap fallback)
+- **A roadmap** of applicable California and federal steps, detailed verified local rules where loaded, and a clearly labeled local estimate everywhere else—grouped into waves you can work on in parallel
 - **A realistic opening date** and critical path
 - **A startup cost estimate**, including rent paid while waiting on permits
 - **The neighborhood**: Census demographics, transit, parking, bike share, nearby businesses and real competitors on an interactive map
@@ -15,7 +15,7 @@ A planner for people opening a physical business (café, restaurant or retail bo
 - **A chat** that updates the plan live and shows each planning step and what changed
 - **Flower evidence checks** across three Docker SuperNodes: real permit, food-facility and alcohol records, with sources and human-reviewed reports saved per plan version
 
-Rules cover San José and Sunnyvale in detail, and county, state and federal steps anywhere in Santa Clara County. Each rule links to its official source; values checked against the source are marked with the check date.
+Every California address receives state and federal requirements plus a clearly marked estimate for local city/county work. San José, Sunnyvale and unincorporated Santa Clara County have detailed local rules; other jurisdictions point owners to CalGOLD and the correct local agencies without presenting placeholder fees or timing as verified facts. Each detailed rule links to its official source; values checked against the source are marked with the check date.
 
 ## Repository layout
 
@@ -87,7 +87,7 @@ Every step in the roadmap already knows what the owner needs next: plans drawn, 
 ## Data sources
 
 - Permits, fees and processes: City of San José, City of Sunnyvale, County of Santa Clara (Environmental Health, Clerk-Recorder), CA Secretary of State, CDTFA, EDD, ABC, IRS. Links are in `web/src/rules/permits.json`.
-- Address to jurisdiction: US Census Geocoder.
+- Address to jurisdiction: US Census Geocoder, with OpenStreetMap fallback for campuses, shopping centers and other coverage gaps.
 - Demographics: US Census Bureau American Community Survey, via Census Reporter.
 - Places, transit, parking and competitors: © OpenStreetMap contributors.
 

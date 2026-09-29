@@ -77,6 +77,16 @@ describe("resilient address lookup", () => {
   it("does not mistake a Santa Clara County label for the City of Santa Clara", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
     const result = await geocode("123 Main St, Santa Clara County, CA");
-    expect(result).toMatchObject({ ok: true, jurisdiction: { kind: "out_of_area", county: "santa_clara", supported: false } });
+    expect(result).toMatchObject({ ok: true, jurisdiction: { kind: "unincorporated", county: "santa_clara", countyName: "Santa Clara County", supported: true } });
+  });
+
+  it("keeps a California address in statewide coverage when providers are unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    const result = await geocode("1340 S Hill St, Los Angeles, CA 90015");
+    expect(result).toMatchObject({
+      ok: true,
+      resolutionSource: "text",
+      jurisdiction: { kind: "city", cityId: "los_angeles", cityName: "Los Angeles", supported: false },
+    });
   });
 });

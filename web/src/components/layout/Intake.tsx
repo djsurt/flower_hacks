@@ -96,7 +96,7 @@ export default function Intake({ onDone }: { onDone: (p: BusinessProfile) => voi
         {error && <p role="alert" className="text-sm text-crit">{error}</p>}
         <button className="btn btn-primary justify-self-start px-5 py-2.5 text-base">Build my plan</button>
       </form>}
-      <p className="mt-10 text-xs text-ink-3">Covers San José today, with county and state steps anywhere in Santa Clara County. Guidance, not legal advice.</p>
+      <p className="mt-10 text-xs text-ink-3">Covers every California address with statewide guidance. Verified local detail is currently available for San José, Sunnyvale and unincorporated Santa Clara County. Guidance, not legal advice.</p>
     </main>
   );
 }
