@@ -7,7 +7,7 @@ import { walkMin } from "@/components/location/placeMeta";
 
 const CompetitorMap = dynamic(() => import("@/components/location/CompetitorMap"), { ssr: false, loading: () => <div className="aspect-square w-full rounded-lg bg-surface-2" /> });
 const RADII = [{ m: 400, label: "5-min walk" }, { m: 800, label: "10-min walk" }, { m: 1609, label: "1 mile" }];
-const PLURAL = { cafe: "cafés", restaurant: "restaurants", retail_boutique: "boutiques" } as const;
+export const PLURAL = { cafe: "cafés", restaurant: "restaurants", retail_boutique: "boutiques" } as const;
 export type Rival = { id: string; name: string; lat: number; lng: number; distanceMeters: number; kind: string; detail?: string };
 type Data = { radiusMeters: number; count: number; perSqMile: number; saturation: "low" | "medium" | "high"; items: Rival[]; source: string; error?: string };
 

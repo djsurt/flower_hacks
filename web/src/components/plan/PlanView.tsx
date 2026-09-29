@@ -8,6 +8,7 @@ import RoadmapView, { PHASE_INFO } from "@/components/plan/RoadmapView";
 import CostChart from "@/components/plan/CostChart";
 import Competitors from "@/components/location/Competitors";
 import NeighborhoodView from "@/components/location/NeighborhoodView";
+import LeaseRecommendations from "@/components/location/LeaseRecommendations";
 import Incentives from "@/components/plan/Incentives";
 
 type Props = { plan: Plan; previous?: Plan; diff?: PlanDiff };
@@ -72,7 +73,7 @@ export default function PlanView({ plan, previous, diff }: Props) {
       {tab === "costs" && <CostChart plan={plan} previous={previous} />}
       {tab === "location" && (plan.profile.address.lat == null || plan.profile.address.lng == null
         ? <LocationUnavailable plan={plan} />
-        : <><NeighborhoodView plan={plan} /><Competitors plan={plan} /></>)}
+        : <><NeighborhoodView plan={plan} /><Competitors plan={plan} /><LeaseRecommendations plan={plan} /></>)}
       {tab === "grants" && <Incentives plan={plan} diff={diff} />}
     </main>
   );
