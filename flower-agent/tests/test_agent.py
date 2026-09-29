@@ -77,6 +77,8 @@ SCRIPT = {
     "Planner agent": (None, {"depends_on": {"building_permit": ["zoning", "plan_check"], "health_permit": ["build_out"]}}),
     "Reviewer agent": (None, {"edits": [{"order": 0, "fee_usd": 5500, "source_url": "https://www.sanjoseca.gov/building"}]}),
     "set up deadline reminders": (("start_automation", {"input": "Remind the owner: submit plan check", "start_at": "2026-10-01T16:00:00+00:00"}), "Scheduled 1 reminder."),
+    "Web dialogue parser": (("update_profile", {"alcohol": "beer_wine"}), None),
+    "Web patch verifier": (None, {"decision": "accept", "patch": {"alcohol": "beer_wine"}}),
 }
 
 
@@ -89,16 +91,41 @@ def run(monkeypatch):
 
     def _run(prompt, trace=None):
         session = FakeSession(prompt, trace)
-        agent_app.main(session, SimpleNamespace(run_config={"model": "test-model"}))
+        agent_app.main(session, SimpleNamespace(run_config={"agent.model": "test-model"}))
         return session, model
     return _run
+
+
+def assistant_text(session):
+    return "".join(e.get("delta", "") for e in session.emitted if e.get("type") == "response.output_text.delta")
+
+
+def web_prompt(message="We'll serve beer and wine"):
+    return json.dumps({
+        "protocol": agent_app.WEB_PROTOCOL,
+        "message": message,
+        "history": [],
+        "currentPlan": {"steps": [], "cost": {}, "openingDate": {}},
+        "patchTool": {
+            "name": "update_profile",
+            "description": "Update explicit facts",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "alcohol": {"type": "string"},
+                    "monthlyRentUsd": {"type": "number"},
+                },
+                "additionalProperties": False,
+            },
+        },
+    })
 
 
 # ---------------------------------------------------------------- flow
 
 def test_full_flow_plan_then_approve_then_reminders(run, capsys):
     s1, model = run("Café at 87 N San Pedro St, San Jose")
-    out = capsys.readouterr().out
+    out = assistant_text(s1)
     roles = [c[0] for c in model.calls]
     for role in ["Intake agent", "Jurisdiction agent", "City agent", "County Health agent", "State agent", "Planner agent"]:
         assert role in roles
@@ -112,16 +139,16 @@ def test_full_flow_plan_then_approve_then_reminders(run, capsys):
 
     # Reminders are refused before approval.
     s2, _ = run("remind me", s1.trace_for_next_turn())
-    assert "once you've approved" in capsys.readouterr().out
+    assert "once you've approved" in assistant_text(s2)
     assert "start_automation" not in s2.tool_calls
 
     s3, _ = run("APPROVE", s1.trace_for_next_turn())
-    assert "Plan approved" in capsys.readouterr().out
+    assert "Plan approved" in assistant_text(s3)
     assert any(e["type"] == agent_app.EVENT_APPROVED for e in s3.emitted)
 
     s4, _ = run("yes please remind me", s3.trace_for_next_turn())
     assert s4.tool_calls == ["start_automation"]
-    assert "Scheduled" in capsys.readouterr().out
+    assert "Scheduled" in assistant_text(s4)
 
 
 def test_human_fixes_a_flagged_step(run, capsys):
@@ -139,9 +166,35 @@ def test_human_fixes_a_flagged_step(run, capsys):
 def test_intake_asks_one_question_when_unclear(run, capsys, monkeypatch):
     monkeypatch.setitem(SCRIPT, "Intake agent", (None, {"question": "What's the address?", "business_type": "cafe"}))
     session, model = run("I want to open a café")
-    assert capsys.readouterr().out.strip() == "What's the address?"
+    assert assistant_text(session) == "What's the address?"
     assert [c[0] for c in model.calls] == ["Intake agent"]
     assert not any(e["type"] == agent_app.EVENT_PLAN for e in session.emitted)
+
+
+def test_web_high_impact_patch_is_reviewed(run):
+    session, model = run(web_prompt())
+    patch = next(e for e in session.emitted if e["type"] == agent_app.EVENT_PROFILE_PATCH)
+    roles = [call[0] for call in model.calls]
+    assert patch == {"type": agent_app.EVENT_PROFILE_PATCH, "patch": {"alcohol": "beer_wine"}, "reviewed": True}
+    assert roles == ["Web dialogue parser", "Web patch verifier"]
+    assert session.emitted[-1]["type"] == "response.completed"
+
+
+def test_web_low_impact_patch_uses_fast_path(run, monkeypatch):
+    monkeypatch.setitem(SCRIPT, "Web dialogue parser", (("update_profile", {"monthlyRentUsd": 6000, "unknown": "drop"}), None))
+    session, model = run(web_prompt("The rent is $6,000"))
+    patch = next(e for e in session.emitted if e["type"] == agent_app.EVENT_PROFILE_PATCH)
+    assert patch["patch"] == {"monthlyRentUsd": 6000}
+    assert patch["reviewed"] is False
+    assert [call[0] for call in model.calls] == ["Web dialogue parser"]
+
+
+def test_web_clarification_streams_standard_text(run, monkeypatch):
+    monkeypatch.setitem(SCRIPT, "Web dialogue parser", (None, "Will the food be prepackaged, or prepared on site?"))
+    session, _ = run(web_prompt("We'll sell some food"))
+    assert assistant_text(session) == "Will the food be prepackaged, or prepared on site?"
+    assert not any(e["type"] == agent_app.EVENT_PROFILE_PATCH for e in session.emitted)
+    assert session.emitted[-1]["type"] == "response.completed"
 
 
 # ---------------------------------------------------------------- safety

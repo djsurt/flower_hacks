@@ -25,11 +25,11 @@ web/                       Next.js app (the product)
   src/components/          UI by area: layout, plan, location, chat, ui
   src/lib/engine/          pure planning engine: buildPlan, diff, waves, geo
   src/lib/services/        outside data: Census geocoder, OpenStreetMap places, Census Reporter
-  src/lib/llm/             chat agent (OpenAI or Claude) with the update_profile tool
+  src/lib/llm/             Flower web protocol, update_profile schema and deterministic executor
   src/rules/               permits, costs and incentives as JSON rules (all plan facts live here)
   src/data/                directory of free help and sample local vendors
   tests/unit/              engine and chat-agent tests (vitest)
-flower-agent/              Flower AgentApp: multi-agent, human-approved permit planner (see flower-agent/README.md)
+flower-agent/              Flower AgentApp plus local Web-to-Flower bridge (see flower-agent/README.md)
 flower-nodes/              Docker SuperNodes with real permit, county health and ABC data (see flower-nodes/README.md)
 docs/                      product overview, shared data model, feature specs F01–F20
 prototypes/                earlier Streamlit food-truck demo (TruckComply)
@@ -37,13 +37,9 @@ prototypes/                earlier Streamlit food-truck demo (TruckComply)
 
 ## Run it
 
-```bash
-cd web
-npm install
-cp .env.example .env.local   # add an OpenAI or Anthropic key for the full chat
-npm run dev                  # http://localhost:3000
-npm test
-```
+The full chat needs three local processes: Flower SuperLink, the loopback bridge, and Next.js. Follow the exact commands in [`flower-agent/README.md`](flower-agent/README.md#run-locally). Node 22+ and Python 3.11+ are required.
+
+For a quick walkthrough after the services are running, follow [`Try the demo`](flower-agent/README.md#try-the-demo). It covers a Reviewer-confirmed alcohol update, a fast rent update, and an ambiguity that should trigger clarification without changing the plan.
 
 For the connected data nodes, run `uv sync --project flower-agent` from the root,
 keep Docker Desktop and the three containers running, and use **Public data
