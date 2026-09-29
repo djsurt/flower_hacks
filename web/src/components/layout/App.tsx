@@ -8,16 +8,25 @@ import { nextQuestion } from "@/lib/nextQuestion";
 import Intake from "@/components/layout/Intake";
 import PlanView from "@/components/plan/PlanView";
 import Chat, { type ChatMsg } from "@/components/chat/Chat";
+import FlowerEvidence from "@/components/plan/FlowerEvidence";
+import { EvidenceReport, type ReviewedEvidence } from "@/lib/flower";
 
-export type Version = { profile: BusinessProfile; plan: Plan; label: string; diff?: PlanDiff };
-type Saved = { versions: { profile: BusinessProfile; label: string }[]; cur: number; messages: ChatMsg[] };
+export type Version = { profile: BusinessProfile; plan: Plan; label: string; diff?: PlanDiff; evidence?: ReviewedEvidence };
+type Saved = { versions: { profile: BusinessProfile; label: string; evidence?: ReviewedEvidence }[]; cur: number; messages: ChatMsg[] };
 const KEY = "comply-cofounder:v2";
 
 export async function resolveAddress(profile: BusinessProfile): Promise<BusinessProfile | { error: string }> {
   const res = await fetch("/api/geocode", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: profile.address.raw }) });
   const g = await res.json();
   if (!g.ok) return { error: g.error };
-  return { ...profile, address: { raw: profile.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng }, jurisdiction: g.jurisdiction };
+  return {
+    ...profile,
+    address: {
+      raw: profile.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng,
+      resolutionSource: g.resolutionSource, matchQuality: g.matchQuality, warning: g.warning,
+    },
+    jurisdiction: g.jurisdiction,
+  };
 }
 
 export default function App() {
@@ -33,7 +42,10 @@ export default function App() {
     try {
       const s = JSON.parse(localStorage.getItem(KEY) ?? "null") as Saved | null;
       if (s?.versions?.length) {
-        const vs: Version[] = s.versions.map(v => ({ ...v, plan: buildPlan(v.profile) }));
+        const vs: Version[] = s.versions.map(v => {
+          const report = EvidenceReport.safeParse(v.evidence?.report);
+          return { ...v, plan: buildPlan(v.profile), evidence: report.success && typeof v.evidence?.reviewedAt === "string" ? { report: report.data, reviewedAt: v.evidence.reviewedAt } : undefined };
+        });
         vs.forEach((v, i) => { if (i) v.diff = diffPlans(vs[i - 1].plan, v.plan); });
         // localStorage only exists after hydration, so this restore has to run in an effect.
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -45,7 +57,7 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ versions: versions.map(v => ({ profile: v.profile, label: v.label })), cur, messages: messages.slice(-80) } satisfies Saved));
+      localStorage.setItem(KEY, JSON.stringify({ versions: versions.map(v => ({ profile: v.profile, label: v.label, evidence: v.evidence })), cur, messages: messages.slice(-80) } satisfies Saved));
     } catch { /* storage full or blocked */ }
   }, [versions, cur, messages, loaded]);
 
@@ -94,7 +106,16 @@ export default function App() {
       </header>
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
-        <PlanView plan={current.plan} previous={versions[cur - 1]?.plan} diff={current.diff} />
+        <div>
+          <FlowerEvidence key={`${cur}:${JSON.stringify(current.profile)}`} profile={current.profile} saved={current.evidence} onReview={report => {
+            // Results belong only to the profile/version that initiated this check.
+            const active = state.current;
+            if (active.cur !== cur || active.versions[cur]?.profile !== current.profile) return;
+            const next = active.versions.map((v, i) => i === cur ? { ...v, evidence: { report, reviewedAt: new Date().toISOString() } } : v);
+            state.current = { versions: next, cur }; setVersions(next);
+          }} />
+          <PlanView plan={current.plan} previous={versions[cur - 1]?.plan} diff={current.diff} />
+        </div>
         <Chat messages={messages} setMessages={setMessages} profile={current.profile} onUpdate={commit} onUndo={undo} currentVersion={cur} />
       </div>
 

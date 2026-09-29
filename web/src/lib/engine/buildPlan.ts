@@ -21,7 +21,9 @@ export const bldgNeeded = (p: BusinessProfile) =>
 /** Rule ids apply when any of their jurisdiction tags is in this list. */
 export function jurisdictionTags(p: BusinessProfile): string[] {
   const j = p.jurisdiction;
-  if (!j || j.kind === "out_of_area") return ["ca"];
+  if (!j) return ["ca"];
+  if (j.kind === "out_of_area") return [];
+  if (j.county !== "santa_clara") return ["ca"];
   if (j.kind === "unincorporated") return ["ca", "scc", "unincorporated_scc"];
   return j.cityId && SUPPORTED_CITIES.includes(j.cityId) ? ["ca", "scc", j.cityId] : ["ca", "scc"];
 }
@@ -49,16 +51,17 @@ const scale = (r: Range, f: number): Range => ({ min: Math.round(r.min * f), typ
 function placeholder(p: BusinessProfile): PermitRule | null {
   const j = p.jurisdiction;
   if (!j || j.supported) return null;
-  const where = j.kind === "out_of_area" ? "Local and county" : `${j.cityName ?? "City"}`;
+  const county = j.countyName ?? (j.county === "unknown" ? "the county" : `${j.county.split("_").map(w => w[0]?.toUpperCase() + w.slice(1)).join(" ")} County`);
+  const where = j.kind === "out_of_area" ? "local" : j.kind === "unincorporated" ? county : `City of ${j.cityName ?? "this location"} and ${county}`;
   return {
     id: "local_placeholder", name: `${where} permits (rules not loaded yet)`, plainName: `Get your ${where} permits`, phase: "build",
-    whatToDo: ["Call the city's permit center. Ask what you need for a business license, zoning and any construction."],
-    shortDescription: "Business license, zoning and building permits for this location. We don't have its rules yet, so this row is a rough estimate.",
+    whatToDo: ["Use CalGOLD to identify the city and county agencies, then confirm business license, zoning, building, fire and health requirements directly with them."],
+    shortDescription: "City and county requirements vary across California. This row reserves time and budget for them without presenting an estimate as a verified local rule.",
     agency: j.cityName ?? "Local government", level: "city", jurisdictions: ["ca"], appliesWhen: true, dependsOn: [],
     durationDays: { min: 45, typical: 90, max: 150 }, feeUsd: { min: 500, typical: 2500, max: 7000 },
-    howToApply: "Contact the city's permit center. Ask about business license, zoning clearance and building permits.",
+    howToApply: "Start with CalGOLD, then contact the listed city and county permit offices before signing a lease or starting work.",
     requiredDocs: [], sourceUrl: "https://www.calgold.ca.gov/", lastVerified: "", verified: false,
-    warnings: ["Placeholder estimate. Real rules for this city aren't loaded yet."],
+    warnings: ["Statewide placeholder estimate. Exact local rules, fees and timing have not been verified for this city or county."],
   };
 }
 

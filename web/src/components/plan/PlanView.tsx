@@ -71,7 +71,9 @@ export default function PlanView({ plan, previous, diff }: Props) {
       </>}
       {tab === "roadmap" && <RoadmapView plan={plan} previous={previous} diff={diff} focusPhase={phase} onClearFocus={() => setPhase("all")} />}
       {tab === "costs" && <CostChart plan={plan} previous={previous} />}
-      {tab === "location" && <><NeighborhoodView plan={plan} /><Competitors plan={plan} /><LeaseRecommendations plan={plan} /></>}
+      {tab === "location" && (plan.profile.address.lat == null || plan.profile.address.lng == null
+        ? <LocationUnavailable plan={plan} />
+        : <><NeighborhoodView plan={plan} /><Competitors plan={plan} /><LeaseRecommendations plan={plan} /></>)}
       {tab === "grants" && <Incentives plan={plan} diff={diff} />}
     </main>
   );
@@ -126,22 +128,25 @@ function Journey({ plan, go }: { plan: Plan; go: (t: Tab, p?: Phase | "all") => 
 function Jurisdiction({ plan }: { plan: Plan }) {
   const p = plan.profile, j = p.jurisdiction;
   if (!j) return null;
-  const local = j.kind === "unincorporated" ? "Santa Clara County (zoning + building)" : j.kind === "out_of_area" ? "Local government" : `City of ${j.cityName}`;
-  const chain: [string, string][] = [
-    [j.kind === "unincorporated" ? "county" : "city", local],
-    ...(j.kind === "city" ? [["county", "Santa Clara County (health)"] as [string, string]] : []),
-    ["state", "State of California"], ["federal", "Federal"],
-  ];
+  const county = j.countyName ?? (j.county === "unknown" ? "County not identified" : `${j.county.split("_").map(w => w[0]?.toUpperCase() + w.slice(1)).join(" ")} County`);
+  const local = j.kind === "unincorporated" ? `${county} (local permits)` : j.kind === "out_of_area" ? "Local government" : `City of ${j.cityName}`;
+  const chain: [string, string][] = j.kind === "out_of_area"
+    ? [["city", local], ["federal", "Federal"]]
+    : [[j.kind === "unincorporated" ? "county" : "city", local], ...(j.kind === "city" ? [["county", `${county} (county services)`] as [string, string]] : []), ["state", "State of California"], ["federal", "Federal"]];
   return (
     <section className="panel p-5 grid gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <div className="eyebrow">Who regulates this address</div>
-          <h1 className="text-2xl font-bold">{j.kind === "unincorporated" ? "Santa Clara County" : j.kind === "out_of_area" ? "Outside our coverage" : `City of ${j.cityName}`}</h1>
+          <h1 className="text-2xl font-bold">{j.kind === "unincorporated" ? county : j.kind === "out_of_area" ? "Outside California coverage" : `City of ${j.cityName}`}</h1>
         </div>
-        {!j.supported && <span className="pill bg-surface-2 text-ink-2">City steps estimated</span>}
+        {j.kind !== "out_of_area" && !j.supported && <span className="pill bg-surface-2 text-ink-2">Local steps estimated</span>}
+        {j.kind === "out_of_area" && <span className="pill bg-surface-2 text-ink-2">California only</span>}
+        {p.address.matchQuality === "approximate" && <span className="pill bg-accent-soft text-accent">Approximate address match</span>}
+        {p.address.matchQuality === "unverified" && <span className="pill bg-surface-2 text-ink-2">Exact pin not verified</span>}
       </div>
       <div className="text-ink-2">{p.address.normalized ?? p.address.raw}{j.censusTract ? ` · Census tract ${j.censusTract}` : ""}</div>
+      {p.address.warning && <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">{p.address.warning}</p>}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         {chain.map(([lvl, name], i) => (
           <span key={name} className="contents">
@@ -150,7 +155,19 @@ function Jurisdiction({ plan }: { plan: Plan }) {
           </span>
         ))}
       </div>
+      {p.address.resolutionSource === "openstreetmap" && <p className="text-xs text-ink-3">Address data © <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.</p>}
     </section>
+  );
+}
+
+function LocationUnavailable({ plan }: { plan: Plan }) {
+  return (
+    <Section title="Location details">
+      <div className="grid gap-2 rounded-lg border border-line bg-surface-2 p-4">
+        <p className="font-semibold">Your plan is ready, but the exact map pin could not be verified.</p>
+        <p className="text-sm text-ink-2">The roadmap uses the city or county in “{plan.profile.address.raw}”. Nearby places, demographics and competitors need an exact pin, so they are hidden for now. You can update the address in chat at any time.</p>
+      </div>
+    </Section>
   );
 }
 

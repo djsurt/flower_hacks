@@ -1,0 +1,19 @@
+{
+  "kind": "curated_source_summary",
+  "synthetic": false,
+  "reviewed_on": "2026-09-29",
+  "collection_note": "Summarized from official pages retrieved through web research. Direct automated downloads returned HTTP 403. These summaries are not full source snapshots or agency endorsements.",
+  "documents": [
+    {
+      "title": "Food facility plan review",
+      "source_url": "https://deh.santaclaracounty.gov/submit-plan-review-restaurants-grocery-stores-and-other-retail-food-storefronts",
+      "summary": "Prepare the plan-check application, submission checklist, menu, equipment specifications, and design documents covering scope, equipment, finishes, mechanical systems, plumbing, electrical systems, and applicable hoods. Review starts after the application is complete and payment is received. The page states review may take up to 20 business days; revisions may be requested. Approved plans are subsequently provided to the relevant planning and building jurisdiction. Construction requires preliminary, pre-final, and final inspections. Complete the operating-permit application and pay applicable fees. This published review period is not a measured total opening time.",
+      "status_tracker_url": "https://data.sccgov.org/stories/s/awpi-tuz7"
+    },
+    {
+      "title": "Existing food facility evaluation",
+      "source_url": "https://deh.santaclaracounty.gov/request-fixed-food-facility-evaluation",
+      "summary": "Existing operating permits do not transfer to a new owner. Submit the facility evaluation package and a menu where applicable, prepare using the self-inspection checklist, and undergo an onsite inspection. Passing the inspection and paying permit fees precede issuance of the operating permit. Significant required alterations can trigger a separate plan review. The county also offers evaluation before purchasing a food business. These requirements do not establish the condition of a particular property."
+    }
+  ]
+}

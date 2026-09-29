@@ -37,6 +37,12 @@ APPROVAL_LINE = "Reply APPROVE to confirm, or tell me what to change."
 EVENT_PLAN = "comply.plan"
 EVENT_APPROVED = "comply.approved"
 EVENT_STATUS = "comply.status"
+EVENT_PROFILE_PATCH = "comply.profile_patch"
+WEB_PROTOCOL = "comply.web.v1"
+HIGH_IMPACT_FIELDS = {
+    "address", "businessType", "foodService", "alcohol", "acquisition",
+    "entityType", "outdoorSeating", "exteriorSign",
+}
 
 # Logs carry only counts and role names, never the owner's message, address or plan.
 log = logging.getLogger("comply_cofounder")
@@ -88,6 +94,18 @@ Call start_automation once per reminder, at most 3 reminders, for the next key d
 Each reminder input must be a short instruction like "Remind the owner: submit the County food facility plan check this week (step 3)". Use ISO 8601 start_at times in UTC, 9:00 AM on the day a week before each step starts (or tomorrow if that has passed).
 Do not include the owner's address or any personal details in the reminder input. After scheduling, reply with one short confirmation listing the dates."""
 
+WEB_INTAKE_PROMPT = """You are the Web dialogue parser inside Comply Cofounder, a planner for first-time physical-business owners.
+You receive the recent conversation and a deterministic current plan. Plan facts, dates and money must come only from that current plan.
+If the owner clearly states or changes a business fact, call update_profile immediately with only the fields they stated or clearly implied.
+If a phrase is ambiguous in a way that changes permits (for example "some food" or "a bar area"), ask one short clarifying question and do not call the tool.
+If the owner asks a question, answer in 2-4 short sentences from the current plan. If the plan does not cover it, say so and recommend confirming with the agency.
+Never invent a permit, cost, date or profile value."""
+
+WEB_REVIEW_PROMPT = """You are the Web patch verifier. Review a proposed profile patch against the owner's exact message.
+Return ONLY JSON: {"decision":"accept","patch":{...}} or {"decision":"clarify","question":"one short question"}.
+Accept only facts the owner stated or clearly implied. Preserve the input field names and values. Remove unsupported fields instead of guessing.
+Use clarify only when ambiguity could change permits, jurisdiction, or the type of business."""
+
 AGENCIES = [
     ("City", "city", "the city (or the County, if the address is in unincorporated land): business license or tax registration, zoning, building, fire, sign and sidewalk permits"),
     ("County Health", "county", "the County Department of Environmental Health and County Clerk-Recorder: food facility plan check, health permit, change of ownership, fictitious business name"),
@@ -100,6 +118,115 @@ AGENCIES = [
 def _status(agent: AgentSession, role: str, state: str, detail: str = "") -> None:
     """Frontend-visible progress (no personal data)."""
     agent.events.emit({"type": EVENT_STATUS, "role": role, "state": state, "detail": detail})
+
+
+def _complete(agent: AgentSession) -> None:
+    """Publish the terminal event expected by Flower Chat and bridge clients."""
+    agent.events.emit({"type": "response.completed", "response": {"status": "completed"}})
+
+
+def _respond(agent: AgentSession, text: str) -> None:
+    """Publish an assistant reply instead of leaving it only in process logs."""
+    if text:
+        agent.events.emit({"type": "response.output_text.delta", "delta": text})
+    _complete(agent)
+
+
+def _web_envelope(text: str) -> dict[str, Any] | None:
+    """Return a validated web protocol envelope, or None for normal Flower Chat."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict) or data.get("protocol") != WEB_PROTOCOL:
+        return None
+    if not isinstance(data.get("message"), str) or not data["message"].strip():
+        raise ValueError("Web envelope requires a non-empty message")
+    tool = data.get("patchTool")
+    if not isinstance(tool, dict) or tool.get("name") != "update_profile":
+        raise ValueError("Web envelope requires the update_profile tool schema")
+    parameters = tool.get("parameters")
+    if not isinstance(parameters, dict) or not isinstance(parameters.get("properties"), dict):
+        raise ValueError("update_profile parameters must be a JSON object schema")
+    return data
+
+
+def _run_web(agent: AgentSession, client: OpenAI, model: str, envelope: dict[str, Any]) -> None:
+    """Interpret one web turn; the TypeScript engine applies any emitted patch."""
+    tool = envelope["patchTool"]
+    allowed_fields = set(tool["parameters"]["properties"])
+    model_tool = {
+        "type": "function",
+        "name": "update_profile",
+        "description": str(tool.get("description") or "Update explicitly stated business facts."),
+        "parameters": tool["parameters"],
+    }
+    context = {
+        "recentConversation": envelope.get("history", [])[-20:],
+        "currentPlan": envelope.get("currentPlan", {}),
+        "ownerMessage": envelope["message"],
+    }
+
+    _status(agent, "Intake agent", "running")
+    response = client.responses.create(
+        model=model,
+        instructions=WEB_INTAKE_PROMPT,
+        input=[{"role": "user", "content": json.dumps(context)}],
+        tools=[model_tool],
+        tool_choice="auto",
+    )
+    calls = [item for item in response.output if getattr(item, "type", "") == "function_call"]
+    if not calls:
+        _status(agent, "Intake agent", "done", "answered from the current plan")
+        _respond(agent, response.output_text or "I need one more detail to help with that.")
+        return
+
+    candidate: dict[str, Any] = {}
+    for call in calls:
+        if getattr(call, "name", "") != "update_profile":
+            continue
+        try:
+            arguments = json.loads(call.arguments or "{}")
+        except json.JSONDecodeError:
+            arguments = {}
+        if isinstance(arguments, dict):
+            candidate.update({key: value for key, value in arguments.items() if key in allowed_fields})
+    if not candidate:
+        _status(agent, "Intake agent", "error", "no valid profile fields")
+        _respond(agent, "I couldn't safely identify a business detail to update. Could you rephrase it?")
+        return
+    _status(agent, "Intake agent", "done", f"{len(candidate)} profile field(s) found")
+
+    reviewed = False
+    if HIGH_IMPACT_FIELDS.intersection(candidate):
+        reviewed = True
+        _status(agent, "Reviewer agent", "running")
+        review_text = run_role(
+            agent,
+            client,
+            model,
+            "Web patch verifier",
+            WEB_REVIEW_PROMPT,
+            json.dumps({"ownerMessage": envelope["message"], "proposedPatch": candidate}),
+        )
+        review = extract_json(review_text) or {}
+        if review.get("decision") == "clarify":
+            _status(agent, "Reviewer agent", "done", "needs clarification")
+            _respond(agent, str(review.get("question") or "Could you clarify that detail?"))
+            return
+        proposed = review.get("patch")
+        if review.get("decision") == "accept" and isinstance(proposed, dict):
+            candidate = {key: value for key, value in proposed.items() if key in candidate and value == candidate[key]}
+        else:
+            candidate = {}
+        if not candidate:
+            _status(agent, "Reviewer agent", "error", "patch rejected")
+            _respond(agent, "I couldn't confirm that change. Could you state the detail more explicitly?")
+            return
+        _status(agent, "Reviewer agent", "done", "high-impact change confirmed")
+
+    agent.events.emit({"type": EVENT_PROFILE_PATCH, "patch": candidate, "reviewed": reviewed})
+    _complete(agent)
 
 
 def _item_dict(item: Any) -> dict[str, Any]:
@@ -280,26 +407,35 @@ def _reminders(agent: AgentSession, client: OpenAI, model: str, plan: dict[str, 
 @app.main()
 def main(agent: AgentSession, context: Context) -> None:
     """Comply Cofounder: plan, wait for approval, then offer reminders."""
-    model = str(context.run_config.get("model", DEFAULT_MODEL)) if context.run_config else DEFAULT_MODEL
+    from agent.evidence import handle_evidence
+    if handle_evidence(agent):
+        return
+    configured_model = (context.run_config.get("agent.model") or context.run_config.get("model") or DEFAULT_MODEL) if context.run_config else DEFAULT_MODEL
+    model = os.environ.get("COMPLY_MODEL") or str(configured_model)
     client = OpenAI(base_url=os.environ["FLWR_RUNTIME_BASE_URL"], api_key=os.environ["FLWR_RUNTIME_API_KEY"], max_retries=0)
     text = (agent.prompt or "").strip()
+    envelope = _web_envelope(text)
+    if envelope is not None:
+        _run_web(agent, client, model, envelope)
+        return
     history = load_history(agent)
 
     # 1) Approval of the plan shown last turn.
     if history["plan"] and not history["approved"] and is_approve(text):
         agent.events.emit({"type": EVENT_APPROVED, "open_date": history["plan"]["open_date"]})
-        print(f"✅ Plan approved. Target opening: {history['plan']['open_date']}.\n\n"
-              "Want deadline reminders for the key steps? Reply \"remind me\" and I'll schedule them.")
+        _respond(agent, f"✅ Plan approved. Target opening: {history['plan']['open_date']}.\n\n"
+                 "Want deadline reminders for the key steps? Reply \"remind me\" and I'll schedule them.")
         return
 
     # 2) Reminders, only after approval.
     if wants_reminders(text):
         if not history["approved"]:
-            print("I can set reminders once you've approved a plan. " + (APPROVAL_LINE if history["plan"] else "Tell me what you're opening and where to start."))
+            _respond(agent, "I can set reminders once you've approved a plan. " + (APPROVAL_LINE if history["plan"] else "Tell me what you're opening and where to start."))
             return
         _status(agent, "Reminders", "running")
-        print(_reminders(agent, client, model, history["plan"]) or "I couldn't schedule reminders right now. Try again in a moment.")
+        reply = _reminders(agent, client, model, history["plan"]) or "I couldn't schedule reminders right now. Try again in a moment."
         _status(agent, "Reminders", "done")
+        _respond(agent, reply)
         return
 
     # 3) A human correcting a flagged step in the plan shown last turn.
@@ -308,7 +444,7 @@ def main(agent: AgentSession, context: Context) -> None:
         plan = _apply_review(agent, client, model, history["plan"], text)
         _status(agent, "Reviewer agent", "done", "correction applied")
         agent.events.emit({"type": EVENT_PLAN, "status": "awaiting_approval", "profile": history["profile"], "plan": plan})
-        print(format_plan(history["profile"] or {}, plan) + "\n\n" + APPROVAL_LINE)
+        _respond(agent, format_plan(history["profile"] or {}, plan) + "\n\n" + APPROVAL_LINE)
         return
 
     # 4) New plan or a change to the last one.
@@ -318,7 +454,7 @@ def main(agent: AgentSession, context: Context) -> None:
     if not isinstance(profile, dict) or profile.get("question") or not profile.get("business_type"):
         question = (profile.get("question") if isinstance(profile, dict) else None) or "What are you opening (café, restaurant or boutique), and at what address?"
         _status(agent, "Intake agent", "done", "needs one answer")
-        print(question)
+        _respond(agent, question)
         return
     _status(agent, "Intake agent", "done", f"{profile.get('business_type')} profile ready")
 
@@ -334,4 +470,4 @@ def main(agent: AgentSession, context: Context) -> None:
 
     plan = _plan(agent, client, model, profile)
     agent.events.emit({"type": EVENT_PLAN, "status": "awaiting_approval", "profile": profile, "plan": plan})
-    print(format_plan(profile, plan) + "\n\n" + APPROVAL_LINE)
+    _respond(agent, format_plan(profile, plan) + "\n\n" + APPROVAL_LINE)

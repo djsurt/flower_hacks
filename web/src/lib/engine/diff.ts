@@ -26,8 +26,8 @@ export function diffPlans(a: Plan, b: Plan): PlanDiff {
 export const placeName = (p: Plan) => {
   const j = p.profile.jurisdiction;
   if (!j) return "Unknown";
-  if (j.kind === "unincorporated") return "Unincorporated Santa Clara County";
-  if (j.kind === "out_of_area") return j.cityName ? `${j.cityName} (outside Santa Clara County)` : "Outside Santa Clara County";
+  if (j.kind === "unincorporated") return j.cityName ?? `Unincorporated ${j.countyName ?? "county area"}`;
+  if (j.kind === "out_of_area") return j.cityName ? `${j.cityName} (outside California)` : "Outside California";
   return j.cityName ?? "Unknown";
 };
 

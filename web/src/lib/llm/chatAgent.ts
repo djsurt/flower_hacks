@@ -1,5 +1,4 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { Acquisition, Alcohol, BusinessType, EntityType, FoodService, type BusinessProfile, type Plan, type ProfilePatch } from "@/lib/schemas";
 import { applyPatch } from "@/lib/defaults";
@@ -9,14 +8,13 @@ import { geocode } from "@/lib/services/geocode";
 import { FIELD_LABELS, VALUE_LABELS } from "@/lib/defaults";
 import { fmtDate } from "@/lib/dates";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
-
 /** Events streamed to the browser, one JSON object per line. */
 export type ChatEvent =
   | { type: "text"; delta: string }
   | { type: "update"; profile: BusinessProfile; label: string }
   | { type: "status"; id: string; label: string; detail?: string; state: "active" | "done" | "error" }
-  | { type: "mode"; mode: "anthropic" | "openai" | "local" }
+  | { type: "mode"; mode: "flower" }
+  | { type: "session"; seriesId: string }
   | { type: "error"; message: string }
   | { type: "done" };
 type Emit = (e: ChatEvent) => void;
@@ -49,28 +47,6 @@ void _drop;
 export const TOOL_NAME = "update_profile";
 export const TOOL_DESCRIPTION = "Change facts about the owner's business. The rules engine then rebuilds the permit list, timeline, costs and incentives, and the owner sees the plan change on screen. Include only fields the owner stated or clearly implied. The result tells you exactly what changed.";
 
-const TOOLS: Anthropic.Beta.BetaTool[] = [{
-  name: TOOL_NAME,
-  description: TOOL_DESCRIPTION,
-  input_schema: inputSchema as Anthropic.Beta.BetaTool.InputSchema,
-  eager_input_streaming: true,
-}];
-
-export const SYSTEM = `You are the chat inside Comply Cofounder, a planner for people opening a physical business (café, restaurant or retail boutique) in Santa Clara County, California. Most users are first-time owners.
-
-The owner started with only a business type and an address. Every other detail is an assumption listed in the context. Your job is to have a natural conversation that fills in the details that matter, and to answer their questions.
-
-How the plan works: a rules engine builds the plan (permits, order, timeline, costs, grants) from the profile. You never write plan facts yourself. When the owner tells you something about their business, call update_profile right away with those fields, then explain what changed using the tool result. You can call it several times in one turn.
-
-Conversation:
-- Ask about one thing at a time, starting with what changes permits most: whether they'll prepare food on site, whether they'll serve alcohol, and what the space was before (same kind of business, empty shell, or buying an existing business). Then size, rent, budget and target opening date.
-- If an answer is ambiguous in a way that changes permits ("some food", "a bar area"), ask a short follow-up instead of guessing.
-- Answer questions only from the plan in the context and from tool results. Quote numbers, dates and fees only from there. If something isn't covered, say so and suggest confirming with the agency.
-- Use plain words. Name the concrete next step. Explain a government term the first time you use it.
-- Write dates the way people say them ("Feb 26, 2027") and round money ("about $44K").
-- Keep replies to 2-4 short sentences. The screen already shows the full checklist, timeline and cost chart, so don't repeat long lists.
-- This is guidance, not legal advice.`;
-
 export function planSnapshot(plan: Plan) {
   const p = plan.profile;
   return {
@@ -94,7 +70,14 @@ export async function applyToProfile(profile: BusinessProfile, patch: ProfilePat
   if (patch.address && patch.address.raw !== profile.address.raw) {
     const g = await geocode(patch.address.raw);
     if (!g.ok) return { error: g.error };
-    next = { ...next, address: { raw: patch.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng }, jurisdiction: g.jurisdiction };
+    next = {
+      ...next,
+      address: {
+        raw: patch.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng,
+        resolutionSource: g.resolutionSource, matchQuality: g.matchQuality, warning: g.warning,
+      },
+      jurisdiction: g.jurisdiction,
+    };
   }
   const before = buildPlan(profile), after = buildPlan(next);
   return { profile: next, plan: after, diff: diffPlans(before, after) };
@@ -152,64 +135,3 @@ export async function executeUpdate(profile: BusinessProfile, rawInput: unknown,
 }
 
 export const contextBlock = (profile: BusinessProfile) => `<current_plan>\n${JSON.stringify(planSnapshot(buildPlan(profile)))}\n</current_plan>\n\n`;
-
-/** Which model runs the chat: CHAT_PROVIDER wins, else whichever key is set (Anthropic first), else the offline parser. */
-export function chatProvider(): "anthropic" | "openai" | "local" {
-  if (process.env.COMPLY_LOCAL_ONLY === "1") return "local";
-  const forced = process.env.CHAT_PROVIDER;
-  if (forced === "anthropic" || forced === "openai" || forced === "local") return forced;
-  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return "anthropic";
-  if (process.env.OPENAI_API_KEY) return "openai";
-  return "local";
-}
-
-export async function runClaudeChat(message: string, history: Turn[], startProfile: BusinessProfile, emit: Emit) {
-  const client = new Anthropic();
-  let profile = startProfile;
-  const context = contextBlock(profile);
-  const messages: Anthropic.Beta.BetaMessageParam[] = [
-    ...history.slice(-20).map(t => ({ role: t.role, content: t.text })),
-    { role: "user", content: context + message },
-  ];
-  // Anthropic requires the first message to be from the user.
-  while (messages.length && messages[0].role !== "user") messages.shift();
-
-  let jsonRetries = 0;
-  emit({ type: "status", id: "read", label: "Reading your message", state: "active" });
-  let readDone = false;
-  for (let round = 0; round < 6; round++) {
-    const stream = client.beta.messages.stream({
-      model: MODEL,
-      max_tokens: 8000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "low" },
-      system: SYSTEM,
-      tools: TOOLS,
-      messages,
-    });
-    stream.on("text", delta => { if (!readDone) { readDone = true; emit({ type: "status", id: "read", label: "Reading your message", state: "done" }); } emit({ type: "text", delta }); });
-    let msg: Anthropic.Beta.BetaMessage;
-    try {
-      msg = await stream.finalMessage();
-      jsonRetries = 0;
-    } catch (err) {
-      if (err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
-      continue; // tool input wasn't parseable JSON; re-issue the turn
-    }
-    if (msg.stop_reason === "refusal") { emit({ type: "text", delta: "\n\nI can't help with that one. Ask me anything about opening your business." }); return; }
-    const calls = msg.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
-    if (!calls.length || msg.stop_reason === "end_turn") return;
-    if (msg.stop_reason === "max_tokens") throw new Error("Reply was cut off. Try asking again.");
-    if (!readDone) { readDone = true; emit({ type: "status", id: "read", label: "Reading your message", detail: "Found details to update", state: "done" }); }
-
-    messages.push({ role: "assistant", content: msg.content });
-    const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
-    for (const call of calls) {
-      const r = await executeUpdate(profile, call.input, emit);
-      profile = r.profile;
-      results.push({ type: "tool_result", tool_use_id: call.id, content: r.content, ...(r.isError ? { is_error: true } : {}) });
-    }
-    messages.push({ role: "user", content: results });
-  }
-}
