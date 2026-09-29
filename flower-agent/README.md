@@ -54,36 +54,72 @@ uv run flwr build
 
 ## Run locally
 
-Terminal 1:
+### One-time setup
+
+Create `flower-agent/.env.local` (it is ignored by Git) and keep the real key only on your machine:
+
 ```bash
-export COMPLY_MODEL="dedicated/flowerai/Kimi-K2.7-Code-1OUHWL"
-export FLWR_MODEL_API_ENDPOINT="https://api.tokenfactory.tf-ca1.nebius.com/v1/responses"
-export FLWR_MODEL_API_KEY="<Flower or Nebius key>"
-uv run flower-superlink --insecure
+FLWR_MODEL_API_ENDPOINT=https://api.tokenfactory.tf-ca1.nebius.com/v1/responses
+FLWR_MODEL_API_KEY=<Kimi-K2.7-Code API key>
+COMPLY_MODEL=dedicated/flowerai/Kimi-K2.7-Code-1OUHWL
 ```
 
-Add to `~/.flwr/config.toml`:
+Add the local connection to `~/.flwr/config.toml`:
+
 ```toml
 [superlink.local-agent]
 address = "127.0.0.1:8000"
 insecure = true
 ```
 
-Terminal 2 (custom web UI bridge):
+### Start the three services
+
+Terminal 1 — Flower SuperLink and Kimi runtime:
+
 ```bash
+cd flower-agent
+uv sync
+set -a
+source .env.local
+set +a
+uv run flower-superlink --insecure
+```
+
+Terminal 2 — loopback Web-to-Flower bridge:
+
+```bash
+cd flower-agent
 uv run uvicorn bridge.app:app --host 127.0.0.1 --port 8787
 ```
 
-Terminal 3:
+Terminal 3 — Next.js demo:
+
 ```bash
-cd ../web
+cd web
 cp .env.example .env.local
+npm install
 npm run dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000). The bridge health check is available at [http://127.0.0.1:8787/health](http://127.0.0.1:8787/health).
+
+If port 8000 is already in use, start SuperLink with `--port 8001 --fleet-api-address 127.0.0.1:9093`, add a separate `superlink.comply-local` entry pointing to port 8001, and launch the bridge with `FLOWER_BRIDGE_CONNECTION=comply-local`.
 
 For Flower Chat instead of the web UI, set `FLWR_CHAT_SUPERLINK=local-agent`, run `uv run flwr chat`, then `/load .`.
 
 `COMPLY_MODEL` overrides the packaged model for local development. Without that environment variable, the published app uses `[tool.flwr.app.config.agent] model = "openai/gpt-5.6-sol"` on SuperGrid.
+
+## Try the demo
+
+1. Choose **Café** and enter `87 N San Pedro St, San Jose, CA`, then click **Build my plan**.
+2. Send `We'll serve beer and wine.` The trace should show **Intake agent** and **Reviewer agent**, then add two alcohol-related steps and update the date and cost.
+3. Send `The rent is $6,000.` This is a low-impact update, so it should use the fast Intake-only path and recalculate costs.
+4. Send `We'll sell some food.` The AgentApp should ask a clarification question and leave the plan unchanged.
+5. Continue chatting in the same browser tab to verify that Flower reuses the same run series.
+
+A successful run shows **Powered by a human-supervised Flower AgentApp**, a visible agent trace, a new plan version, and a deterministic change card. Flower interprets the message, but the TypeScript rules engine remains responsible for permits, dates, costs, and jurisdiction.
+
+To stop the demo, press `Ctrl+C` once in each of the three terminals.
 
 ## Publish and run on SuperGrid
 

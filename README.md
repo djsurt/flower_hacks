@@ -37,6 +37,8 @@ prototypes/                earlier Streamlit food-truck demo (TruckComply)
 
 The full chat needs three local processes: Flower SuperLink, the loopback bridge, and Next.js. Follow the exact commands in [`flower-agent/README.md`](flower-agent/README.md#run-locally). Node 22+ and Python 3.11+ are required.
 
+For a quick walkthrough after the services are running, follow [`Try the demo`](flower-agent/README.md#try-the-demo). It covers a Reviewer-confirmed alcohol update, a fast rent update, and an ambiguity that should trigger clarification without changing the plan.
+
 ## Future plan: marketplace
 
 Every step in the roadmap already knows what the owner needs next: plans drawn, a contractor, an alcohol license consultant, a CPA for payroll. The marketplace turns the "Who can help" tab (sample listings today) into real, bookable local pros, matched to the exact step and moment.
