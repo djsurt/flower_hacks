@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "comply-collaboration-probe"
+version = "0.1.0"
+description = "Disposable Flower Agent collaboration capability probe"
+license = { file = "LICENSE" }
+requires-python = ">=3.11,<4.0"
+dependencies = ["flwr>=1.39.0,<1.40.0", "openai>=2.16.0,<3.0.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["probe_agent"]
+
+[tool.flwr.app]
+publisher = "niujiazhen"
+display-name = "Comply Collaboration Probe"
+fab-format-version = 1
+flwr-version-target = "1.39.0"
+fab-include = ["probe_agent/**/*.py", "LICENSE"]
+
+[tool.flwr.app.config.agent]
+model = "openai/gpt-5.6-sol"
+input = '{"protocol":"comply.probe.v1","operation":"hub_connector"}'
+
+[tool.flwr.app.components]
+agentapp = "probe_agent.agent_app:app"

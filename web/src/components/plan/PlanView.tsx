@@ -9,6 +9,7 @@ import CostChart from "@/components/plan/CostChart";
 import Competitors from "@/components/location/Competitors";
 import NeighborhoodView from "@/components/location/NeighborhoodView";
 import Incentives from "@/components/plan/Incentives";
+import ResearchWorkbench from "@/components/plan/ResearchWorkbench";
 
 type Props = { plan: Plan; previous?: Plan; diff?: PlanDiff };
 
@@ -24,9 +25,9 @@ export function Section({ title, children, right }: { title: string; children: R
   );
 }
 
-type Tab = "overview" | "roadmap" | "costs" | "location" | "grants";
+type Tab = "overview" | "research" | "roadmap" | "costs" | "location" | "grants";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" }, { id: "roadmap", label: "Roadmap" },
+  { id: "overview", label: "Overview" }, { id: "research", label: "Research ✦" }, { id: "roadmap", label: "Roadmap" },
   { id: "costs", label: "Costs" }, { id: "location", label: "Location" }, { id: "grants", label: "Grants & help" },
 ];
 
@@ -68,6 +69,7 @@ export default function PlanView({ plan, previous, diff }: Props) {
         <Journey plan={plan} go={go} />
         <Assumptions plan={plan} />
       </>}
+      {tab === "research" && <ResearchWorkbench plan={plan} />}
       {tab === "roadmap" && <RoadmapView plan={plan} previous={previous} diff={diff} focusPhase={phase} onClearFocus={() => setPhase("all")} />}
       {tab === "costs" && <CostChart plan={plan} previous={previous} />}
       {tab === "location" && (plan.profile.address.lat == null || plan.profile.address.lng == null

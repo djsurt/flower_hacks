@@ -8,7 +8,6 @@ import { nextQuestion } from "@/lib/nextQuestion";
 import Intake from "@/components/layout/Intake";
 import PlanView from "@/components/plan/PlanView";
 import Chat, { type ChatMsg } from "@/components/chat/Chat";
-import FlowerEvidence from "@/components/plan/FlowerEvidence";
 import { EvidenceReport, type ReviewedEvidence } from "@/lib/flower";
 
 export type Version = { profile: BusinessProfile; plan: Plan; label: string; diff?: PlanDiff; evidence?: ReviewedEvidence };
@@ -107,13 +106,6 @@ export default function App() {
 
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
         <div>
-          <FlowerEvidence key={`${cur}:${JSON.stringify(current.profile)}`} profile={current.profile} saved={current.evidence} onReview={report => {
-            // Results belong only to the profile/version that initiated this check.
-            const active = state.current;
-            if (active.cur !== cur || active.versions[cur]?.profile !== current.profile) return;
-            const next = active.versions.map((v, i) => i === cur ? { ...v, evidence: { report, reviewedAt: new Date().toISOString() } } : v);
-            state.current = { versions: next, cur }; setVersions(next);
-          }} />
           <PlanView plan={current.plan} previous={versions[cur - 1]?.plan} diff={current.diff} />
         </div>
         <Chat messages={messages} setMessages={setMessages} profile={current.profile} onUpdate={commit} onUndo={undo} currentVersion={cur} />
