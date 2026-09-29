@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Comply Cofounder: a human-supervised multi-agent permit planner for opening a café, restaurant or boutique in San José / Santa Clara County"
 license = { file = "LICENSE" }
 requires-python = ">=3.11,<4.0"
-dependencies = ["flwr>=1.38.0,<2.0", "openai>=2.16.0,<3.0.0"]
+dependencies = ["flwr>=1.39.0,<=1.39.0", "openai>=2.16.0,<3.0.0"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
@@ -17,9 +17,9 @@ dev = ["pytest>=8"]
 packages = ["agent"]
 
 [tool.flwr.app]
-publisher = "bansal1600"  # set to your Flower username before publishing
+publisher = "djsurti3003"  # set to your Flower username before publishing
 fab-format-version = 1
-flwr-version-target = "1.38.0"
+flwr-version-target = "1.39.0"
 fab-include = ["agent/**/*.py", "LICENSE"]
 
 [tool.flwr.app.config]

@@ -6,6 +6,14 @@ framework: []
 
 # Comply Cofounder AgentApp (Flower)
 
+**Web integration:** the same AgentApp now also accepts a structured evidence
+request from `bridge.py` and delegates read-only tasks through Flower Grid to
+the three Docker SuperNodes. `agent/evidence.py` computes address matches and
+provenance locally on each node without a model call. Reports stream to the
+Next.js plan for human review. See [setup and current capabilities](../flower-nodes/README.md#integrated-web-app).
+The conversational workflow below is a separate mode; its original role calls
+are sequential and its source-domain check does not verify factual claims.
+
 A human-supervised team of agents that plans every permit a café, restaurant or boutique needs to open in San José / Santa Clara County. Every step carries a source, the Checker flags anything without an official `.gov` source, and nothing moves forward until the owner types **APPROVE**.
 
 ## How it works

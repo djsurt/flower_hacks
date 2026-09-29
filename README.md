@@ -13,6 +13,7 @@ A planner for people opening a physical business (café, restaurant or retail bo
 - **The neighborhood**: Census demographics, transit, parking, bike share, nearby businesses and real competitors on an interactive map
 - **Grants and free help** the owner may qualify for
 - **A chat** that updates the plan live and shows each planning step and what changed
+- **Flower evidence checks** across three Docker SuperNodes: real permit, food-facility and alcohol records, with sources and human-reviewed reports saved per plan version
 
 Rules cover San José and Sunnyvale in detail, and county, state and federal steps anywhere in Santa Clara County. Each rule links to its official source; values checked against the source are marked with the check date.
 
@@ -29,6 +30,7 @@ web/                       Next.js app (the product)
   src/data/                directory of free help and sample local vendors
   tests/unit/              engine and chat-agent tests (vitest)
 flower-agent/              Flower AgentApp: multi-agent, human-approved permit planner (see flower-agent/README.md)
+flower-nodes/              Docker SuperNodes with real permit, county health and ABC data (see flower-nodes/README.md)
 docs/                      product overview, shared data model, feature specs F01–F20
 prototypes/                earlier Streamlit food-truck demo (TruckComply)
 ```
@@ -42,6 +44,13 @@ cp .env.example .env.local   # add an OpenAI or Anthropic key for the full chat
 npm run dev                  # http://localhost:3000
 npm test
 ```
+
+For the connected data nodes, run `uv sync --project flower-agent` from the root,
+keep Docker Desktop and the three containers running, and use **Public data
+evidence → Check my address** on your plan. The bridge uses your Flower CLI
+login. See [node setup and capabilities](flower-nodes/README.md#integrated-web-app).
+This integration is for localhost; evidence review does not automatically change
+permit requirements, costs or estimated dates.
 
 ## Future plan: marketplace
 
