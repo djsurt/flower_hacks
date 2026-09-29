@@ -72,11 +72,18 @@ export function jurisdictionFromGeographies(g: CensusMatch["geographies"]): Juri
   const county = g["Counties"]?.[0];
   const place = g["Incorporated Places"]?.[0];
   const tract = g["Census Tracts"]?.[0]?.GEOID;
-  if (!county || county.GEOID !== "06085")
-    return { kind: "out_of_area", county: county?.BASENAME ?? "unknown", cityName: place?.BASENAME, censusTract: tract, supported: false };
-  if (!place) return { kind: "unincorporated", county: "santa_clara", cityName: "Unincorporated Santa Clara County", censusTract: tract, supported: true };
+  const countyBase = county?.BASENAME;
+  const countyKey = countyBase ? cityId(countyBase) : "unknown";
+  const countyName = countyBase ? `${countyBase} County` : undefined;
+  if (!county || !county.GEOID.startsWith("06"))
+    return { kind: "out_of_area", county: countyKey, countyName, cityName: place?.BASENAME, censusTract: tract, supported: false };
+  const santaClara = county.GEOID === "06085";
+  if (!place) return {
+    kind: "unincorporated", county: countyKey, countyName,
+    cityName: `Unincorporated ${countyName}`, censusTract: tract, supported: santaClara,
+  };
   const c = place.GEOID === SAN_JOSE_GEOID ? { id: "san_jose", name: "San José" } : { id: place.BASENAME.toLowerCase().replace(/\W+/g, "_"), name: place.BASENAME };
-  return { kind: "city", cityId: c.id, cityName: c.name, county: "santa_clara", censusTract: tract, supported: SUPPORTED.has(c.id) };
+  return { kind: "city", cityId: c.id, cityName: c.name, county: countyKey, countyName, censusTract: tract, supported: santaClara && SUPPORTED.has(c.id) };
 }
 
 async function censusAddress(address: string): Promise<CensusMatch | null> {
@@ -136,11 +143,27 @@ function placeFromAddress(address: NominatimAddress = {}) {
   return address.city ?? address.town ?? address.village ?? address.hamlet ?? address.municipality;
 }
 
+function countyParts(value?: string) {
+  const base = value?.replace(/\s+County$/i, "").trim();
+  return { county: base ? cityId(base) : "unknown", countyName: base ? `${base} County` : undefined };
+}
+
+function localityFromRaw(raw: string) {
+  const parts = raw.split(",").map(p => p.trim()).filter(Boolean);
+  const state = parts.findIndex(p => /^(?:ca|california)(?:\s+\d{5}(?:-\d{4})?)?$/i.test(p));
+  return state > 1 ? parts[state - 1] : undefined;
+}
+
 function jurisdictionFromText(raw: string, address: NominatimAddress = {}): Jurisdiction {
-  const locality = placeFromAddress(address);
-  const haystack = `${locality ?? ""}, ${address.county ?? ""}, ${raw}`.toLowerCase();
-  const countyIsSantaClara = /santa clara/.test(haystack) || /\b(stanford|palo alto|sunnyvale|san jos[eé]|cupertino|mountain view)\b/.test(haystack);
-  if (!countyIsSantaClara) return { kind: "out_of_area", county: address.county ?? "unknown", cityName: placeFromAddress(address), supported: false };
+  let locality = placeFromAddress(address) ?? localityFromRaw(raw);
+  let { county, countyName } = countyParts(address.county);
+  if (locality && /\s+county$/i.test(locality)) {
+    ({ county, countyName } = countyParts(locality));
+    locality = undefined;
+  }
+  const california = address.state?.toLowerCase() === "california" || /(?:,|\s)(?:ca|california)(?:\s+\d{5}(?:-\d{4})?)?\s*$/i.test(raw.trim());
+  if (!california) return { kind: "out_of_area", county, countyName, cityName: locality, supported: false };
+
   const localKey = locality?.toLowerCase();
   const rawWithoutCounty = raw.toLowerCase().replace(/santa clara county/g, "");
   const found = (localKey && SANTA_CLARA_CITIES.has(localKey) ? [localKey, SANTA_CLARA_CITIES.get(localKey)!] as const : null)
@@ -148,11 +171,12 @@ function jurisdictionFromText(raw: string, address: NominatimAddress = {}): Juri
   if (found) {
     const [, name] = found;
     const id = cityId(name);
-    return { kind: "city", cityId: id, cityName: name, county: "santa_clara", supported: SUPPORTED.has(id) };
+    return { kind: "city", cityId: id, cityName: name, county: "santa_clara", countyName: "Santa Clara County", supported: SUPPORTED.has(id) };
   }
-  if (/\bstanford\b/.test(haystack)) return { kind: "unincorporated", county: "santa_clara", cityName: "Unincorporated Santa Clara County", supported: true };
-  if (locality) return { kind: "city", cityId: cityId(locality), cityName: locality, county: "santa_clara", supported: false };
-  return { kind: "out_of_area", county: "santa_clara", cityName: "Santa Clara County area", supported: false };
+  if (/\bstanford\b/i.test(`${locality ?? ""}, ${raw}`)) return { kind: "unincorporated", county: "santa_clara", countyName: "Santa Clara County", cityName: "Unincorporated Santa Clara County", supported: true };
+  if (locality) return { kind: "city", cityId: cityId(locality), cityName: locality, county, countyName, supported: false };
+  if (countyName) return { kind: "unincorporated", county, countyName, cityName: `Unincorporated ${countyName}`, supported: county === "santa_clara" };
+  return { kind: "city", cityId: "california_location", cityName: "California location", county: "unknown", supported: false };
 }
 
 function tidyNominatimAddress(match: NominatimMatch, fallback: string) {

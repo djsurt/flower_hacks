@@ -127,20 +127,20 @@ function Journey({ plan, go }: { plan: Plan; go: (t: Tab, p?: Phase | "all") => 
 function Jurisdiction({ plan }: { plan: Plan }) {
   const p = plan.profile, j = p.jurisdiction;
   if (!j) return null;
-  const local = j.kind === "unincorporated" ? "Santa Clara County (zoning + building)" : j.kind === "out_of_area" ? "Local government" : `City of ${j.cityName}`;
-  const chain: [string, string][] = [
-    [j.kind === "unincorporated" ? "county" : "city", local],
-    ...(j.kind === "city" ? [["county", "Santa Clara County (health)"] as [string, string]] : []),
-    ["state", "State of California"], ["federal", "Federal"],
-  ];
+  const county = j.countyName ?? (j.county === "unknown" ? "County not identified" : `${j.county.split("_").map(w => w[0]?.toUpperCase() + w.slice(1)).join(" ")} County`);
+  const local = j.kind === "unincorporated" ? `${county} (local permits)` : j.kind === "out_of_area" ? "Local government" : `City of ${j.cityName}`;
+  const chain: [string, string][] = j.kind === "out_of_area"
+    ? [["city", local], ["federal", "Federal"]]
+    : [[j.kind === "unincorporated" ? "county" : "city", local], ...(j.kind === "city" ? [["county", `${county} (county services)`] as [string, string]] : []), ["state", "State of California"], ["federal", "Federal"]];
   return (
     <section className="panel p-5 grid gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <div className="eyebrow">Who regulates this address</div>
-          <h1 className="text-2xl font-bold">{j.kind === "unincorporated" ? "Santa Clara County" : j.kind === "out_of_area" ? "Outside our coverage" : `City of ${j.cityName}`}</h1>
+          <h1 className="text-2xl font-bold">{j.kind === "unincorporated" ? county : j.kind === "out_of_area" ? "Outside California coverage" : `City of ${j.cityName}`}</h1>
         </div>
-        {!j.supported && <span className="pill bg-surface-2 text-ink-2">City steps estimated</span>}
+        {j.kind !== "out_of_area" && !j.supported && <span className="pill bg-surface-2 text-ink-2">Local steps estimated</span>}
+        {j.kind === "out_of_area" && <span className="pill bg-surface-2 text-ink-2">California only</span>}
         {p.address.matchQuality === "approximate" && <span className="pill bg-accent-soft text-accent">Approximate address match</span>}
         {p.address.matchQuality === "unverified" && <span className="pill bg-surface-2 text-ink-2">Exact pin not verified</span>}
       </div>

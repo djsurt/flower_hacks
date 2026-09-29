@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPlan } from "@/lib/engine/buildPlan";
+import { buildPlan, jurisdictionTags } from "@/lib/engine/buildPlan";
 import { diffPlans, humanSummary } from "@/lib/engine/diff";
 import { jurisdictionFromGeographies } from "@/lib/services/geocode";
 import { applyPatch, completeProfile } from "@/lib/defaults";
@@ -141,14 +141,24 @@ describe("local chat fallback", () => {
 });
 
 describe("jurisdiction detection", () => {
-  const g = (place?: string, county = "06085") => ({
-    Counties: [{ GEOID: county, NAME: "x", BASENAME: county === "06085" ? "Santa Clara" : "Alameda" }],
-    ...(place ? { "Incorporated Places": [{ GEOID: place, NAME: "x", BASENAME: place === "0668000" ? "San Jose" : "Sunnyvale" }] } : {}),
+  const g = (place?: string, county = "06085", countyName = "Santa Clara", placeName = place === "0668000" ? "San Jose" : "Sunnyvale") => ({
+    Counties: [{ GEOID: county, NAME: "x", BASENAME: countyName }],
+    ...(place ? { "Incorporated Places": [{ GEOID: place, NAME: "x", BASENAME: placeName }] } : {}),
   });
   it("San José", () => expect(jurisdictionFromGeographies(g("0668000"))).toMatchObject({ kind: "city", cityId: "san_jose", supported: true }));
   it("Sunnyvale is supported", () => expect(jurisdictionFromGeographies(g("0677000"))).toMatchObject({ kind: "city", cityId: "sunnyvale", supported: true }));
   it("no place = unincorporated", () => expect(jurisdictionFromGeographies(g())).toMatchObject({ kind: "unincorporated", supported: true }));
-  it("other county = out of area", () => expect(jurisdictionFromGeographies(g(undefined, "06001"))).toMatchObject({ kind: "out_of_area" }));
+  it("another California county remains in statewide coverage", () => expect(jurisdictionFromGeographies(g(undefined, "06001", "Alameda"))).toMatchObject({ kind: "unincorporated", county: "alameda", countyName: "Alameda County", supported: false }));
+  it("a California city gets statewide estimated coverage", () => expect(jurisdictionFromGeographies(g("0644000", "06037", "Los Angeles", "Los Angeles"))).toMatchObject({ kind: "city", cityId: "los_angeles", county: "los_angeles", countyName: "Los Angeles County", supported: false }));
+  it("another state remains out of area", () => expect(jurisdictionFromGeographies(g(undefined, "32003", "Clark"))).toMatchObject({ kind: "out_of_area", county: "clark" }));
+  it("does not load Santa Clara rules for another California county", () => {
+    const profile = { ...cafe(), jurisdiction: jurisdictionFromGeographies(g("0644000", "06037", "Los Angeles", "Los Angeles")) };
+    expect(jurisdictionTags(profile)).toEqual(["ca"]);
+    const ids = buildPlan(profile).items.map(i => i.ruleId);
+    expect(ids).toContain("local_placeholder");
+    expect(ids).toContain("cdtfa_sellers_permit");
+    expect(ids.some(id => id.startsWith("sj_") || id.startsWith("sv_") || id.startsWith("scc_") || id.startsWith("deh_"))).toBe(false);
+  });
 });
 
 describe("address display", () => {

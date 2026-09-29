@@ -13,6 +13,7 @@ export const Jurisdiction = z.object({
   cityId: z.string().optional(),
   cityName: z.string().optional(),
   county: z.string(),
+  countyName: z.string().optional(),
   censusTract: z.string().optional(),
   supported: z.boolean(),
 });
