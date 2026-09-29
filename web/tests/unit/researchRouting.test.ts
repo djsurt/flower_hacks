@@ -15,6 +15,12 @@ describe("automatic research routing", () => {
     expect(researchAgentsForChange(before, applyPatch(before, { foodService: "prepared_food" }))).toEqual(["county"]);
   });
 
+  it("routes a confirmed default because it is no longer an assumption", () => {
+    const before = base();
+    expect(before.assumed).toContain("foodService");
+    expect(researchAgentsForChange(before, applyPatch(before, { foodService: "prepared_food" }))).toEqual(["county"]);
+  });
+
   it("routes employee count to employer specialist", () => {
     const before = base();
     expect(researchAgentsForChange(before, applyPatch(before, { employeesPlanned: 12 }))).toEqual(["employer"]);
