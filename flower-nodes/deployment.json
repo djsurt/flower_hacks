@@ -1,0 +1,9 @@
+{
+  "federation": "@djsurti3003/comply-cofounder",
+  "flower_version": "1.39.0",
+  "nodes": {
+    "sanjose": "9228757528304447072",
+    "county-health": "14889312096352897577",
+    "abc": "6553679376321286512"
+  }
+}

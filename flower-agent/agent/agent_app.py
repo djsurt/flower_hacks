@@ -215,8 +215,10 @@ def _run_web(agent: AgentSession, client: OpenAI, model: str, envelope: dict[str
             _respond(agent, str(review.get("question") or "Could you clarify that detail?"))
             return
         proposed = review.get("patch")
-        if isinstance(proposed, dict):
-            candidate = {key: value for key, value in proposed.items() if key in allowed_fields}
+        if review.get("decision") == "accept" and isinstance(proposed, dict):
+            candidate = {key: value for key, value in proposed.items() if key in candidate and value == candidate[key]}
+        else:
+            candidate = {}
         if not candidate:
             _status(agent, "Reviewer agent", "error", "patch rejected")
             _respond(agent, "I couldn't confirm that change. Could you state the detail more explicitly?")
@@ -405,6 +407,9 @@ def _reminders(agent: AgentSession, client: OpenAI, model: str, plan: dict[str, 
 @app.main()
 def main(agent: AgentSession, context: Context) -> None:
     """Comply Cofounder: plan, wait for approval, then offer reminders."""
+    from agent.evidence import handle_evidence
+    if handle_evidence(agent):
+        return
     configured_model = (context.run_config.get("agent.model") or context.run_config.get("model") or DEFAULT_MODEL) if context.run_config else DEFAULT_MODEL
     model = os.environ.get("COMPLY_MODEL") or str(configured_model)
     client = OpenAI(base_url=os.environ["FLWR_RUNTIME_BASE_URL"], api_key=os.environ["FLWR_RUNTIME_API_KEY"], max_retries=0)

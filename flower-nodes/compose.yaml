@@ -1,0 +1,38 @@
+name: comply-flower
+
+x-node: &node
+  image: flwr/supernode:1.39.0
+  restart: unless-stopped
+  user: "${COMPLY_UID:?Run python3 configure.py}:${COMPLY_GID:?Run python3 configure.py}"
+  environment:
+    FLWR_HOME: /tmp/flwr-home
+    UV_CACHE_DIR: /tmp/uv-cache
+    UV_PYTHON_INSTALL_DIR: /tmp/uv-python
+    FLWR_MODEL_API_KEY: ${FLWR_MODEL_API_KEY:?Run python3 configure.py to save your Flower model key}
+    FLWR_FILESYSTEM_ALLOWED_DIRS: /data
+  command:
+    - --superlink=fleet-supergrid.flower.ai:443
+    - --auth-supernode-private-key=/keys/node
+    - --allow-runtime-dependency-installation
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  sanjose:
+    <<: *node
+    volumes:
+      - ./keys/sanjose:/keys/node:ro
+      - ./data/sanjose:/data:ro
+  county-health:
+    <<: *node
+    volumes:
+      - ./keys/county-health:/keys/node:ro
+      - ./data/county-health:/data:ro
+  abc:
+    <<: *node
+    volumes:
+      - ./keys/abc:/keys/node:ro
+      - ./data/abc:/data:ro

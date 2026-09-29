@@ -116,7 +116,7 @@ def test_failure_is_a_readable_error_and_stops_run():
     output = decode(runner.stream("hello"))
 
     assert output[-2]["type"] == "error"
-    assert "terminal event" in output[-2]["message"]
+    assert "RuntimeError" in output[-2]["message"]
     assert client.stopped == [123]
 
 
@@ -129,6 +129,25 @@ def test_connection_failure_is_returned_as_ndjson():
     output = decode(runner.stream("hello"))
 
     assert output == [
-        {"type": "error", "message": "SuperLink unavailable"},
+        {"type": "error", "message": "Flower bridge failed (RuntimeError). Check the bridge and SuperLink configuration."},
         {"type": "done"},
     ]
+
+
+def test_terminal_event_does_not_wait_for_stream_to_close():
+    client = FakeClient()
+    def events(_request):
+        yield StreamRunEventsResponse(task_event=TaskEvent(event="response.completed", data="{}"))
+        raise AssertionError("must not read past the terminal event")
+    client.StreamRunEvents = events
+    runner = FlowerRunner(client_factory=lambda: client, agent_builder=lambda _: local_agent())
+    output = decode(runner.stream("hello"))
+    assert not any(item["type"] == "error" for item in output)
+    assert client.closed
+
+
+def test_transport_errors_do_not_expose_credentials():
+    def fail():
+        raise RuntimeError("Authorization: Bearer secret-token")
+    output = decode(FlowerRunner(client_factory=fail).stream("hello"))
+    assert "secret-token" not in json.dumps(output)
