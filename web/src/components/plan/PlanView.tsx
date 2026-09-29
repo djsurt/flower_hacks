@@ -70,7 +70,9 @@ export default function PlanView({ plan, previous, diff }: Props) {
       </>}
       {tab === "roadmap" && <RoadmapView plan={plan} previous={previous} diff={diff} focusPhase={phase} onClearFocus={() => setPhase("all")} />}
       {tab === "costs" && <CostChart plan={plan} previous={previous} />}
-      {tab === "location" && <><NeighborhoodView plan={plan} /><Competitors plan={plan} /></>}
+      {tab === "location" && (plan.profile.address.lat == null || plan.profile.address.lng == null
+        ? <LocationUnavailable plan={plan} />
+        : <><NeighborhoodView plan={plan} /><Competitors plan={plan} /></>)}
       {tab === "grants" && <Incentives plan={plan} diff={diff} />}
     </main>
   );
@@ -139,8 +141,11 @@ function Jurisdiction({ plan }: { plan: Plan }) {
           <h1 className="text-2xl font-bold">{j.kind === "unincorporated" ? "Santa Clara County" : j.kind === "out_of_area" ? "Outside our coverage" : `City of ${j.cityName}`}</h1>
         </div>
         {!j.supported && <span className="pill bg-surface-2 text-ink-2">City steps estimated</span>}
+        {p.address.matchQuality === "approximate" && <span className="pill bg-accent-soft text-accent">Approximate address match</span>}
+        {p.address.matchQuality === "unverified" && <span className="pill bg-surface-2 text-ink-2">Exact pin not verified</span>}
       </div>
       <div className="text-ink-2">{p.address.normalized ?? p.address.raw}{j.censusTract ? ` · Census tract ${j.censusTract}` : ""}</div>
+      {p.address.warning && <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">{p.address.warning}</p>}
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         {chain.map(([lvl, name], i) => (
           <span key={name} className="contents">
@@ -149,7 +154,19 @@ function Jurisdiction({ plan }: { plan: Plan }) {
           </span>
         ))}
       </div>
+      {p.address.resolutionSource === "openstreetmap" && <p className="text-xs text-ink-3">Address data © <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>.</p>}
     </section>
+  );
+}
+
+function LocationUnavailable({ plan }: { plan: Plan }) {
+  return (
+    <Section title="Location details">
+      <div className="grid gap-2 rounded-lg border border-line bg-surface-2 p-4">
+        <p className="font-semibold">Your plan is ready, but the exact map pin could not be verified.</p>
+        <p className="text-sm text-ink-2">The roadmap uses the city or county in “{plan.profile.address.raw}”. Nearby places, demographics and competitors need an exact pin, so they are hidden for now. You can update the address in chat at any time.</p>
+      </div>
+    </Section>
   );
 }
 

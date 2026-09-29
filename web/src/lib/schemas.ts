@@ -23,6 +23,9 @@ export const Address = z.object({
   normalized: z.string().optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
+  resolutionSource: z.enum(["census", "openstreetmap", "text"]).optional(),
+  matchQuality: z.enum(["exact", "approximate", "unverified"]).optional(),
+  warning: z.string().optional(),
 });
 
 export const BusinessProfile = z.object({

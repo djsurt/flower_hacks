@@ -70,7 +70,14 @@ export async function applyToProfile(profile: BusinessProfile, patch: ProfilePat
   if (patch.address && patch.address.raw !== profile.address.raw) {
     const g = await geocode(patch.address.raw);
     if (!g.ok) return { error: g.error };
-    next = { ...next, address: { raw: patch.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng }, jurisdiction: g.jurisdiction };
+    next = {
+      ...next,
+      address: {
+        raw: patch.address.raw, normalized: g.normalized, lat: g.lat, lng: g.lng,
+        resolutionSource: g.resolutionSource, matchQuality: g.matchQuality, warning: g.warning,
+      },
+      jurisdiction: g.jurisdiction,
+    };
   }
   const before = buildPlan(profile), after = buildPlan(next);
   return { profile: next, plan: after, diff: diffPlans(before, after) };
