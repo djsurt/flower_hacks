@@ -242,3 +242,11 @@ def test_fallback_rules_and_schedule():
     assert not by["sj_sign_permit"]["critical"]  # signs never set the opening date
     assert by["sj_building_permit"]["status"] == "Needs verification"  # sjeconomy.com is not .gov
     assert by["deh_plan_check"]["status"] == "Official source"
+
+
+@pytest.mark.parametrize("review", ["not JSON", {}, {"decision": "reject"}, {"decision": "accept"}, {"decision": "accept", "patch": {"alcohol": "full_liquor"}}, {"decision": "accept", "patch": {"monthlyRentUsd": 9000}}])
+def test_web_invalid_review_never_applies_a_patch(run, monkeypatch, review):
+    monkeypatch.setitem(SCRIPT, "Web patch verifier", (None, review))
+    session, _ = run(web_prompt())
+    assert not any(e["type"] == agent_app.EVENT_PROFILE_PATCH for e in session.emitted)
+    assert "couldn't confirm" in assistant_text(session)

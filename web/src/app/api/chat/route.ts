@@ -5,18 +5,18 @@ import {
   TOOL_DESCRIPTION,
   TOOL_NAME,
   type ChatEvent,
-  type Turn,
 } from "@/lib/llm/chatAgent";
 import { buildPlan } from "@/lib/engine/buildPlan";
 import { nextQuestion } from "@/lib/nextQuestion";
-import type { BusinessProfile } from "@/lib/schemas";
+import { BusinessProfile } from "@/lib/schemas";
+import { z } from "zod";
 
-type Body = {
-  message: string;
-  history?: Turn[];
-  profile: BusinessProfile;
-  seriesId?: string;
-};
+const Body = z.object({
+  message: z.string().trim().min(1).max(32000),
+  history: z.array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(32000) })).max(80).default([]),
+  profile: BusinessProfile,
+  seriesId: z.string().regex(/^[1-9]\d*$/).max(20).nullish(),
+});
 
 type BridgeLine =
   | { type: "run"; runId: string; seriesId?: string }
@@ -29,13 +29,16 @@ const FLOWER_RUN_TIMEOUT_MS = Number(process.env.FLOWER_RUN_TIMEOUT_MS || 120_00
 
 /** Streams Flower AgentApp events while the deterministic web engine remains the plan authority. */
 export async function POST(req: Request) {
-  const { message, history = [], profile, seriesId } = (await req.json()) as Body;
-  if (!message?.trim() || !profile) return Response.json({ error: "Missing message or profile." }, { status: 400 });
+  const parsed = Body.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return Response.json({ error: "Invalid chat request." }, { status: 400 });
+  const { message, history, profile, seriesId } = parsed.data;
+  const upstream = new AbortController();
+  let cancelled = false;
 
   const body = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
-      const emit = (event: ChatEvent) => controller.enqueue(enc.encode(`${JSON.stringify(event)}\n`));
+      const emit = (event: ChatEvent) => { if (!cancelled) controller.enqueue(enc.encode(`${JSON.stringify(event)}\n`)); };
       let workingProfile = profile;
       emit({ type: "mode", mode: "flower" });
 
@@ -53,7 +56,7 @@ export async function POST(req: Request) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ prompt, ...(seriesId ? { seriesId } : {}) }),
           cache: "no-store",
-          signal: AbortSignal.any([req.signal, timeoutSignal]),
+          signal: AbortSignal.any([req.signal, timeoutSignal, upstream.signal]),
         });
         if (!response.ok || !response.body) {
           const detail = await response.text().catch(() => "");
@@ -62,6 +65,7 @@ export async function POST(req: Request) {
 
         const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
         let buffer = "";
+        let terminal = false;
         for (;;) {
           const { value, done } = await reader.read();
           if (done) break;
@@ -71,11 +75,15 @@ export async function POST(req: Request) {
           for (const line of lines) {
             if (!line.trim()) continue;
             const item = JSON.parse(line) as BridgeLine;
+            if (item.type === "done") terminal = true;
             if (item.type === "run" && item.seriesId) {
               emit({ type: "session", seriesId: item.seriesId });
             } else if (item.type === "error") {
               emit({ type: "error", message: item.message });
             } else if (item.type === "event") {
+              if (["error", "response.failed", "response.incomplete"].includes(item.event)) {
+                throw new Error("The Flower Agent run failed or was incomplete. Please try again.");
+              }
               if (item.event === "response.output_text.delta" && typeof item.data.delta === "string") {
                 emit({ type: "text", delta: item.data.delta });
               } else if (item.event === "comply.status") {
@@ -102,20 +110,23 @@ export async function POST(req: Request) {
             }
           }
         }
+        if (!terminal || buffer.trim()) throw new Error("The Flower Bridge stream ended unexpectedly. Please try again.");
       } catch (error) {
         if (req.signal.aborted) {
           emit({ type: "error", message: "The Flower run was cancelled." });
         } else if (error instanceof DOMException && error.name === "TimeoutError") {
-          emit({ type: "error", message: "The Flower run timed out and was stopped. Please try again." });
+          emit({ type: "error", message: "The Flower run timed out. Cancellation was requested; check Flower if it is still running." });
         } else {
           console.error("Flower chat failed:", error instanceof Error ? error.message : error);
           emit({ type: "error", message: friendlyError(error) });
         }
       } finally {
+        upstream.abort();
         emit({ type: "done" });
-        controller.close();
+        if (!cancelled) controller.close();
       }
     },
+    cancel() { cancelled = true; upstream.abort(); },
   });
 
   return new Response(body, {

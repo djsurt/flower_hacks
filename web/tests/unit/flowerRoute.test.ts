@@ -61,7 +61,31 @@ describe("Flower chat route", () => {
     const response = await POST(request());
     const events = (await response.text()).trim().split("\n").map(line => JSON.parse(line));
 
-    expect(events.some(event => event.type === "error" && /timed out and was stopped/i.test(event.message))).toBe(true);
+    expect(events.some(event => event.type === "error" && /timed out/i.test(event.message))).toBe(true);
     expect(events.at(-1)).toEqual({ type: "done" });
   });
+});
+
+
+it.each(["response.failed", "response.incomplete", "error"])("reports %s as an error", async event => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(ndjson(
+    { type: "event", event, data: {} }, { type: "done" },
+  ))));
+  const response = await POST(request());
+  expect(await response.text()).toContain('"type":"error"');
+});
+
+it("rejects malformed requests before starting a run", async () => {
+  const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+  for (const body of ["invalid JSON", JSON.stringify({ message: 42, profile }), JSON.stringify({ message: "hello", profile: {} })]) {
+    const response = await POST(new Request("http://localhost/api/chat", { method: "POST", body }));
+    expect(response.status).toBe(400);
+  }
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("reports a truncated bridge stream", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(ndjson({ type: "run", runId: "1" }))));
+  const response = await POST(request());
+  expect(await response.text()).toContain('"type":"error"');
 });

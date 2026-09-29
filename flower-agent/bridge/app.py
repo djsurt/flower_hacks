@@ -122,16 +122,18 @@ class FlowerRunner:
 
             for item in client.StreamRunEvents(StreamRunEventsRequest(run_id=run_id)):
                 event_name, data = self._event(item.task_event)
-                yield _line({"type": "event", "event": event_name, "data": data})
                 if event_name in TERMINAL_EVENTS:
                     terminal = True
+                yield _line({"type": "event", "event": event_name, "data": data})
+                if terminal:
+                    break
             if not terminal:
                 raise RuntimeError("Flower event stream ended before a terminal event.")
         except GeneratorExit:
             disconnected = True
             return
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            yield _line({"type": "error", "message": str(exc) or exc.__class__.__name__})
+            yield _line({"type": "error", "message": f"Flower bridge failed ({type(exc).__name__}). Check the bridge and SuperLink configuration."})
         finally:
             if client is not None and run_id is not None and not terminal:
                 try:

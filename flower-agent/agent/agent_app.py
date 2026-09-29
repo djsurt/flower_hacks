@@ -215,8 +215,10 @@ def _run_web(agent: AgentSession, client: OpenAI, model: str, envelope: dict[str
             _respond(agent, str(review.get("question") or "Could you clarify that detail?"))
             return
         proposed = review.get("patch")
-        if isinstance(proposed, dict):
-            candidate = {key: value for key, value in proposed.items() if key in allowed_fields}
+        if review.get("decision") == "accept" and isinstance(proposed, dict):
+            candidate = {key: value for key, value in proposed.items() if key in candidate and value == candidate[key]}
+        else:
+            candidate = {}
         if not candidate:
             _status(agent, "Reviewer agent", "error", "patch rejected")
             _respond(agent, "I couldn't confirm that change. Could you state the detail more explicitly?")
