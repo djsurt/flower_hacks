@@ -1,27 +1,30 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { BusinessProfile, PlanDiff } from "@/lib/schemas";
+import type { BusinessProfile, Plan, PlanDiff } from "@/lib/schemas";
 import type { ChatEvent } from "@/lib/llm/chatAgent";
 import { humanSummary } from "@/lib/engine/diff";
 import { daysBetween, fmtShort, kmoney, spanText } from "@/lib/dates";
 import StepIcon from "@/components/plan/StepIcon";
+import ChatResearch from "@/components/chat/ChatResearch";
 
 export type ChatMsg =
   | { role: "user" | "assistant" | "note"; text: string }
   | { role: "diff"; diff: PlanDiff; version: number; label: string }
-  | { role: "trace"; steps: TraceStep[] };
+  | { role: "trace"; steps: TraceStep[] }
+  | { role: "research"; id: string };
 export type TraceStep = { id: string; label: string; detail?: string; state: "active" | "done" | "error" };
 
 type Props = {
   messages: ChatMsg[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMsg[]>>;
   profile: BusinessProfile;
+  plan: Plan;
   onUpdate: (p: BusinessProfile, label: string) => { diff: PlanDiff; version: number };
   onUndo: () => void;
   currentVersion: number;
 };
 
-export default function Chat({ messages, setMessages, profile, onUpdate, onUndo, currentVersion }: Props) {
+export default function Chat({ messages, setMessages, profile, plan, onUpdate, onUndo, currentVersion }: Props) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"flower" | null>(null);
@@ -29,6 +32,19 @@ export default function Chat({ messages, setMessages, profile, onUpdate, onUndo,
   const list = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight }); }, [messages, busy]);
+  useEffect(() => {
+    const target = list.current;
+    if (!target) return;
+    const observer = new MutationObserver(() => target.scrollTo({ top: target.scrollHeight, behavior: "smooth" }));
+    observer.observe(target, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, []);
+
+  function research() {
+    if (busy) return;
+    const id = `research-${Date.now()}`;
+    setMessages(ms => [...ms, { role: "research", id }]);
+  }
 
   // Streamed text goes into the last assistant bubble; an update closes it so later text starts a new one.
   // Decide "new bubble or append" when the event arrives, not inside the state updater, which React may run later.
@@ -102,12 +118,13 @@ export default function Chat({ messages, setMessages, profile, onUpdate, onUndo,
   return (
     <aside id="chat" className="panel flex min-h-[560px] scroll-mt-4 flex-col lg:sticky lg:top-3 lg:h-[calc(100vh-24px)]" aria-label="Plan chat">
       <div className="border-b border-line px-4 py-3.5">
-        <h2 className="text-lg font-bold">Tell me about your business</h2>
+        <div className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">Plan copilot</h2><button className="btn !px-2.5 !py-1 text-xs" onClick={research} disabled={busy}>Run 4 agents</button></div>
         <p className="text-xs text-ink-3">Chat normally. Anything you mention, like food, alcohol, the space, rent, budget or dates, updates the plan as we talk.</p>
         {mode === "flower" && <p className="mt-2 text-xs text-ink-3">Powered by a human-supervised Flower AgentApp.</p>}
       </div>
       <div ref={list} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3.5 max-lg:max-h-[480px]" aria-live="polite">
-        {messages.map((m, i) => m.role === "trace" ? <Trace key={i} steps={m.steps} />
+        {messages.map((m, i) => m.role === "research" ? <ChatResearch key={m.id} plan={plan} runId={m.id} />
+          : m.role === "trace" ? <Trace key={i} steps={m.steps} />
           : m.role === "diff"
           ? <DiffCard key={i} m={m} onUndo={onUndo} canUndo={m.version === currentVersion && currentVersion > 0} />
           : m.role === "note" ? <p key={i} className="self-center text-center text-xs text-ink-3">{m.text}</p>

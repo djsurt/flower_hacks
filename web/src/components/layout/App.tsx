@@ -48,7 +48,7 @@ export default function App() {
         vs.forEach((v, i) => { if (i) v.diff = diffPlans(vs[i - 1].plan, v.plan); });
         // localStorage only exists after hydration, so this restore has to run in an effect.
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setVersions(vs); setCur(Math.min(s.cur, vs.length - 1)); setMessages(s.messages ?? []);
+        setVersions(vs); setCur(Math.min(s.cur, vs.length - 1)); setMessages((s.messages ?? []).filter(m => m.role !== "research" && !(m.role === "user" && m.text === "Research this plan with the four Flower agents.")));
       }
     } catch { /* ignore corrupt storage */ }
     setLoaded(true);
@@ -56,7 +56,7 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ versions: versions.map(v => ({ profile: v.profile, label: v.label, evidence: v.evidence })), cur, messages: messages.slice(-80) } satisfies Saved));
+      localStorage.setItem(KEY, JSON.stringify({ versions: versions.map(v => ({ profile: v.profile, label: v.label, evidence: v.evidence })), cur, messages: messages.filter(m => m.role !== "research" && !(m.role === "user" && m.text === "Research this plan with the four Flower agents.")).slice(-80) } satisfies Saved));
     } catch { /* storage full or blocked */ }
   }, [versions, cur, messages, loaded]);
 
@@ -108,7 +108,7 @@ export default function App() {
         <div>
           <PlanView plan={current.plan} previous={versions[cur - 1]?.plan} diff={current.diff} />
         </div>
-        <Chat messages={messages} setMessages={setMessages} profile={current.profile} onUpdate={commit} onUndo={undo} currentVersion={cur} />
+        <Chat messages={messages} setMessages={setMessages} profile={current.profile} plan={current.plan} onUpdate={commit} onUndo={undo} currentVersion={cur} />
       </div>
 
       <a href="#chat" className="btn btn-primary fixed bottom-4 right-4 z-50 shadow-lg lg:hidden" style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}>Chat</a>
