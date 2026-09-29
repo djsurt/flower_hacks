@@ -24,7 +24,8 @@ type Props = {
 export default function Chat({ messages, setMessages, profile, onUpdate, onUndo, currentVersion }: Props) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mode, setMode] = useState<"anthropic" | "openai" | "local" | null>(null);
+  const [mode, setMode] = useState<"flower" | null>(null);
+  const seriesId = useRef<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight }); }, [messages, busy]);
@@ -50,7 +51,7 @@ export default function Chat({ messages, setMessages, profile, onUpdate, onUndo,
     setBusy(true);
     const fresh = { v: true, closedTrace: false };
     try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text, history, profile }) });
+      const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text, history, profile, seriesId: seriesId.current }) });
       if (!res.body) throw new Error("no body");
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let buf = "";
@@ -65,6 +66,7 @@ export default function Chat({ messages, setMessages, profile, onUpdate, onUndo,
           const e = JSON.parse(line) as ChatEvent;
           if (e.type === "text") appendText(e.delta, fresh);
           else if (e.type === "mode") setMode(e.mode);
+          else if (e.type === "session") seriesId.current = e.seriesId;
           else if (e.type === "status") {
             // Steps build up in one trace until text or a plan update closes it (decided now, not in the updater).
             const forceNew = fresh.closedTrace;
@@ -102,7 +104,7 @@ export default function Chat({ messages, setMessages, profile, onUpdate, onUndo,
       <div className="border-b border-line px-4 py-3.5">
         <h2 className="text-lg font-bold">Tell me about your business</h2>
         <p className="text-xs text-ink-3">Chat normally. Anything you mention, like food, alcohol, the space, rent, budget or dates, updates the plan as we talk.</p>
-        {mode === "local" && <p className="mt-2 text-xs text-ink-3">Offline mode: simple keyword matching. Add OPENAI_API_KEY or ANTHROPIC_API_KEY to web/.env.local and restart for the full assistant.</p>}
+        {mode === "flower" && <p className="mt-2 text-xs text-ink-3">Powered by a human-supervised Flower AgentApp.</p>}
       </div>
       <div ref={list} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3.5 max-lg:max-h-[480px]" aria-live="polite">
         {messages.map((m, i) => m.role === "trace" ? <Trace key={i} steps={m.steps} />

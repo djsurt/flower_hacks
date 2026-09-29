@@ -5,22 +5,20 @@ Tell it what you're opening and where. It returns every city, county, state and 
 ## Run it
 
 ```bash
-npm install
+cp .env.example .env.local
+npm install                 # Node 22+
 npm run dev        # http://localhost:3000
 npm test           # engine unit tests
 ```
 
-Copy `.env.example` to `.env.local` (restart `npm run dev` after editing):
+The chat always uses the local Flower Bridge. The default is:
 
 ```
-OPENAI_API_KEY=sk-...          # use OpenAI for the chat
-OPENAI_MODEL=gpt-5.5           # optional; any chat model your account can use
-ANTHROPIC_API_KEY=...          # or use Claude (claude-opus-5-5)
-CHAT_PROVIDER=openai           # optional: force openai | anthropic | local when both keys are set
-COMPLY_LOCAL_ONLY=1            # optional: force the offline keyword parser
+FLOWER_BRIDGE_URL=http://127.0.0.1:8787
+FLOWER_RUN_TIMEOUT_MS=120000
 ```
 
-With no key, the chat falls back to a keyword parser.
+Start SuperLink and the bridge from `flower-agent/` before sending a chat message. Model credentials belong in the SuperLink shell and are never read by Next.js.
 
 ## How it fits together
 
@@ -29,16 +27,15 @@ With no key, the chat falls back to a keyword parser.
 - `src/lib/engine/diff.ts`: `diffPlans` + `humanSummary` for the "What changed" card. Numbers always come from here.
 - `src/lib/services/geocode.ts`: US Census geocoder → city / unincorporated / out-of-area.
 - `src/lib/services/places.ts`, `neighborhood.ts`: OpenStreetMap places and Census Reporter demographics.
-- `src/lib/llm/chatAgent.ts`: the `update_profile` tool, the shared executor and prompt, provider selection, and the Claude loop.
-- `src/lib/llm/openaiChat.ts`: the same loop on OpenAI chat completions. Neither model writes plan facts.
-- `src/lib/localParser.ts`: deterministic fallback with the same output shape.
+- `src/lib/llm/chatAgent.ts`: the `update_profile` schema, deterministic executor and plan snapshot sent to Flower.
+- `src/app/api/chat/route.ts`: proxies the Flower event stream, validates emitted patches, and rebuilds the plan.
 - `src/lib/defaults.ts`: fills everything the owner didn't say and records it as `assumed`.
 
 ## Minimal intake, then chat
 
 The owner gives two things: business type and address. Everything else starts as a typical default for that type (shown read-only as "Assuming for now") and gets filled in by talking.
 
-`/api/chat` streams NDJSON events. The model (OpenAI or Claude) runs a tool loop with one tool, `update_profile`. Each call is validated with zod, applied (geocoding when the address changes), and the rebuilt plan is sent to the browser immediately as an `update` event, so the plan changes while Claude is still replying. The tool result gives Claude the exact diff and the new plan, so its explanation uses engine numbers only. Without an API key the same route runs the keyword parser (`localParser.ts`) and asks the next most useful question (`nextQuestion.ts`).
+`/api/chat` streams NDJSON events from a Flower AgentApp. Flower interprets the owner's message and emits a candidate `comply.profile_patch`; high-impact changes pass through a second Reviewer role. The web route validates every patch with zod, applies it (including geocoding when the address changes), and rebuilds the deterministic plan. Flower never writes permit, cost or timeline facts directly.
 
 ## Data status (checked 2026-09-28)
 
