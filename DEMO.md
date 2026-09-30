@@ -13,7 +13,8 @@ This guide is written for any teammate presenting the hackathon demo. Follow the
 
 2. Open <http://localhost:3000>.
 3. Click **New plan** so no previous conversation is visible.
-4. Keep this guide open on a second screen.
+4. Use a browser window at least 1,200 px wide, or zoom out to 80–90%, so the Plan remains visible on the left while Chat runs on the right.
+5. Keep this guide open on a second screen.
 
 If anything unexpected happens, click **New plan** and restart. Do not wait for a slow live SuperGrid run during the three-minute presentation; the visible research trace is intentionally a deterministic demo replay.
 
@@ -41,19 +42,19 @@ Say:
 
 > These dates, costs, and dependencies come from our deterministic rules engine. The language model does not invent compliance numbers. The same confirmed profile always produces the same plan.
 
-### 0:45–1:20 — Confirm food and space; watch automatic routing
+### 0:45–1:20 — Change food and space; watch the first plan diff
 
 The Plan Copilot asks about food. Paste:
 
 ```text
-We will prepare food on site in a former restaurant.
+We will only sell prepackaged food, and the location is an empty shell.
 ```
 
-As the plan updates, point to the Flower trace appearing automatically in the chat.
+Point first to the new Plan version and the visible changes on the left: the food-permit path, buildout assumptions, cost, and schedule are recalculated. Then point to the Flower trace appearing automatically in Chat.
 
 Say:
 
-> The owner never has to choose an agent. The Copilot recognizes that food and the prior use affect compliance, then routes narrow tasks to the County Health and local specialists. The trace shows the task envelope, Grid dispatch, search, fetch, Kimi analysis, and each reply.
+> This answer changes two real planning facts, so the left-hand plan immediately rebuilds and shows a versioned diff. The owner never chooses an agent: the Copilot automatically routes the food question to County Health and the empty-shell question to the local specialist.
 
 Point out that the street address is replaced by a SHA-256 token before specialist dispatch.
 
@@ -65,7 +66,7 @@ Paste:
 We will serve beer and wine.
 ```
 
-Point to **State / Alcohol** and **City / Local** starting automatically.
+Point to the left-hand Plan first: the permit count, cost, and opening path update again. Then point to **State / Alcohol** and **City / Local** starting automatically in Chat.
 
 Say:
 
@@ -73,19 +74,19 @@ Say:
 
 While they run, point out their independent Searching, Fetching, Analyzing, and Reply stages.
 
-### 1:55–2:25 — Add employees; complete the four-agent story
+### 1:55–2:25 — Change size and hiring; show a third plan diff
 
 Paste:
 
 ```text
-The space is 2,000 square feet and we will hire 12 employees.
+The space is 3,500 square feet and we will hire 12 employees.
 ```
 
-Point to **Employer / Federal** starting automatically. The City agent may also run because size can affect local review.
+Point to the new Plan version and updated cost/buildout calculations on the left. Then point to **Employer / Federal** starting automatically; the City agent also runs because the larger space can affect local review.
 
 Say:
 
-> Hiring activates the Employer specialist for EIN, EDD, workers’ compensation, and workplace-safety requirements. Across three answers, all four specialists have participated, but only when their domain became relevant.
+> The third answer visibly rebuilds the plan again. Hiring activates the Employer specialist for EIN, EDD, workers’ compensation, and workplace safety, while the larger footprint activates local review. Across three answers, all four specialists participate only when relevant.
 
 ### 2:25–2:50 — Show verification and human approval
 
